@@ -1,6 +1,6 @@
 import React from 'react';
 import { useDatasetContext } from '../context/DatasetContext';
-import { FamilySelector }   from './FamilySelector';    // ← new
+import { FamilySelector }   from './FamilySelector';
 import { DatasetSelector }  from './DatasetSelector';
 import { ControlPanel }     from './ControlPanel';
 import { MapView }          from './MapView';
@@ -10,7 +10,6 @@ export function Dashboard() {
   const { activeDataset, activeFamily } = useDatasetContext();
 
   return (
-    // data-family drives CSS custom property theming for the entire subtree
     <div className="dashboard" data-family={activeFamily.id}>
 
       <header className="dashboard-header">

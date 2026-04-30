@@ -78,8 +78,11 @@ registerDataset({
   },
 
   async dataLoader(controls) {
-    const res = await fetch(`/api/ch4/usa?${new URLSearchParams(controls)}`);
-    if (!res.ok) throw new Error(`CH4/USA fetch failed: ${res.statusText}`);
-    return res.json();
+    // Stub — replace with real endpoint when API is ready
+    return { type: 'FeatureCollection', features: [] };
+    
+    //const res = await fetch(`/api/ch4/conus?${new URLSearchParams(controls)}`);
+    //if (!res.ok) throw new Error(`CH4/CONUS fetch failed: ${res.statusText}`);
+    //return res.json();
   },
 });
