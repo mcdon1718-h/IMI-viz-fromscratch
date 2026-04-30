@@ -1,0 +1,1 @@
+// fetches emissions data reactively
