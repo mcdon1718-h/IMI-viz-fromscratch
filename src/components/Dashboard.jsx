@@ -13,7 +13,7 @@ export function Dashboard() {
     <div className="dashboard" data-family={activeFamily.id}>
 
       <header className="dashboard-header">
-        <h1 className="dashboard-title">Emissions Dashboard</h1>
+        <h1 className="dashboard-title">IMI Output Dashboard</h1>
         <FamilySelector />
       </header>
 

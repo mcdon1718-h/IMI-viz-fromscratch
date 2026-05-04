@@ -7,12 +7,11 @@ registerDataset({
   description: 'Column-averaged CO₂ concentrations over the continental United States.',
 
   mapConfig: {
-    initialViewState: { longitude: -98.5, latitude: 39.5, zoom: 4 },
-    minZoom: 3,
-    maxZoom: 12,
-    maxBounds: [[-130, 22], [-60, 52]],
-    mapStyle: 'mapbox://styles/mapbox/dark-v11',
-  },
+  initialViewState: { latitude: 39.5, longitude: -98.5, zoom: 4 },
+  minZoom: 3,
+  maxZoom: 12,
+  maxBounds: [[22, -130], [52, -60]],   // [[southLat, westLng], [northLat, eastLng]]
+ },
 
   controls: [
     {

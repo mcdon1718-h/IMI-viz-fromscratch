@@ -1,93 +1,65 @@
-import React, { useRef, useEffect, useCallback } from 'react';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import React from 'react';
+import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 import { useDatasetContext } from '../context/DatasetContext';
-import { useEmissionData } from '../hooks/useEmissionData';
-
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
-
-const SOURCE_ID = 'emissions';
-const LAYER_ID  = 'emissions-fill';
+import { useEmissionData }   from '../hooks/useEmissionData';
 
 export function MapView() {
-  const { activeDataset } = useDatasetContext();
-  const { data, loading, error } = useEmissionData();
+  const { activeDataset }          = useDatasetContext();
+  const { data, loading, error }   = useEmissionData();
+  const { mapConfig, display }     = activeDataset;
+  const { initialViewState: ivs }  = mapConfig;
 
-  const containerRef  = useRef(null);
-  const mapRef        = useRef(null);
-  const activeIdRef   = useRef(null); // track which dataset the map was built for
-
-  // ── (Re-)initialize map when dataset changes ────────────────────────────────
-  useEffect(() => {
-    // Tear down old instance
-    if (mapRef.current) {
-      mapRef.current.remove();
-      mapRef.current = null;
-    }
-
-    const { initialViewState: ivs, minZoom, maxZoom, maxBounds, mapStyle } = activeDataset.mapConfig;
-
-    const map = new mapboxgl.Map({
-      container: containerRef.current,
-      style:     mapStyle,
-      center:    [ivs.longitude, ivs.latitude],
-      zoom:      ivs.zoom,
-      minZoom,
-      maxZoom,
-      ...(maxBounds ? { maxBounds } : {}),
-    });
-
-    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    mapRef.current = map;
-    activeIdRef.current = activeDataset.id;
-
-    return () => { map.remove(); mapRef.current = null; };
-  }, [activeDataset.id]); // only re-init on dataset switch
-
-  // ── Update data layer whenever data arrives ─────────────────────────────────
-  const applyData = useCallback((map, geojson, colorScale) => {
-    if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-    if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-
-    map.addSource(SOURCE_ID, { type: 'geojson', data: geojson });
-    map.addLayer({
-      id:     LAYER_ID,
-      type:   'fill',
-      source: SOURCE_ID,
-      paint: {
-        'fill-color': buildColorExpression(colorScale),
-        'fill-opacity': 0.85,
-        'fill-outline-color': 'rgba(0,0,0,0.1)',
-      },
-    });
-  }, []);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !data) return;
-
-    if (map.isStyleLoaded()) {
-      applyData(map, data, activeDataset.display.colorScale);
-    } else {
-      map.once('styledata', () => applyData(map, data, activeDataset.display.colorScale));
-    }
-  }, [data, activeDataset.display.colorScale, applyData]);
+  function styleFeature(feature) {
+    const value = feature.properties?.value ?? 0;
+    return {
+      fillColor:   getColor(value, display.colorScale.stops),
+      fillOpacity: 0.85,
+      color:       'rgba(0,0,0,0.1)',
+      weight:      0.5,
+    };
+  }
 
   return (
     <div className="map-wrapper">
-      <div ref={containerRef} className="map-container" />
+      {/* key forces full re-mount when switching between datasets */}
+      <MapContainer
+        key={activeDataset.id}
+        center={[ivs.latitude, ivs.longitude]}
+        zoom={ivs.zoom}
+        minZoom={mapConfig.minZoom}
+        maxZoom={mapConfig.maxZoom}
+        maxBounds={mapConfig.maxBounds}
+        style={{ width: '100%', height: '100%' }}
+      >
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        />
+        {data && data.features.length > 0 && (
+          <GeoJSON
+            key={`${activeDataset.id}-data`}
+            data={data}
+            style={styleFeature}
+          />
+        )}
+      </MapContainer>
+
       {loading && <div className="map-overlay loading">Loading data…</div>}
       {error   && <div className="map-overlay error">⚠ {error}</div>}
     </div>
   );
 }
 
-/** Convert { stops: [value, color], ... } config to a Mapbox step expression */
-function buildColorExpression(colorScale) {
-  const entries = Object.entries(colorScale.stops).sort(([a], [b]) => a - b);
-  const expr = ['interpolate', ['linear'], ['get', 'value']];
-  for (const [stop, color] of entries) {
-    expr.push(Number(stop), color);
+// ─── Color helper ─────────────────────────────────────────────────────────────
+// Walks the stops array and returns the color for the highest matching threshold
+
+function getColor(value, stops) {
+  const sorted = [...stops].sort((a, b) => a[0] - b[0]);
+  let color = sorted[0][1];
+  for (const [stop, c] of sorted) {
+    if (value >= stop) color = c;
+    else break;
   }
-  return expr;
+  return color;
 }

@@ -7,12 +7,11 @@ registerDataset({
   description: 'Worldwide methane column concentrations from satellite observations.',
 
   mapConfig: {
-    initialViewState: { longitude: 10, latitude: 20, zoom: 1.8 },
-    minZoom: 1,
-    maxZoom: 8,
-    maxBounds: null,
-    mapStyle: 'mapbox://styles/mapbox/dark-v11',
-  },
+  initialViewState: { latitude: 20, longitude: 10, zoom: 2 },
+  minZoom: 1,
+  maxZoom: 8,
+  maxBounds: null,
+   },
 
   controls: [
     {
