@@ -77,6 +77,39 @@ registerDataset({
     legendTitle: 'CH₄ Column Avg (ppb)',
   },
 
+  timeSeries: {
+    lines: [
+      { key: 'emissions', label: 'IMI Emissions',        color: '#f59e0b' },
+      { key: 'satellite', label: 'TROPOMI Observations', color: '#60a5fa' },
+    ],
+    async loader(controls) {
+      // Stub data — replace with real API call when ready
+      return [
+        { year: 2019, emissions: 1810, satellite: 1825 },
+        { year: 2020, emissions: 1798, satellite: 1812 },
+        { year: 2021, emissions: 1823, satellite: 1838 },
+        { year: 2022, emissions: 1845, satellite: 1861 },
+        { year: 2023, emissions: 1862, satellite: 1878 },
+      ];
+      // const res = await fetch(`/api/ch4/conus/timeseries?${new URLSearchParams(controls)}`);
+      // return res.json();
+    },
+  },
+
+  sectorBreakdown: {
+    async loader(controls) {
+      return [
+        { sector: 'Oil & Gas',   emissions: 520, satellite: 545 },
+        { sector: 'Coal',        emissions: 180, satellite: 195 },
+        { sector: 'Agriculture', emissions: 620, satellite: 638 },
+        { sector: 'Waste',       emissions: 290, satellite: 305 },
+        { sector: 'Wetlands',    emissions: 250, satellite: 268 },
+      ];
+      // const res = await fetch(`/api/ch4/conus/sectors?${new URLSearchParams(controls)}`);
+      // return res.json();
+    },
+  },
+
   async dataLoader(controls) {
     // Stub — replace with real endpoint when API is ready
     return { type: 'FeatureCollection', features: [] };

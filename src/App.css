@@ -6,7 +6,7 @@
   --text-primary: #f1f5f9;
   --text-muted:   #94a3b8;
   --border:       #2d3148;
-  --sidebar-w:    280px;
+  --sidebar-w:    320px;
   --header-h:     56px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -24,8 +24,23 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
 .dashboard-sidebar    { width: var(--sidebar-w); background: var(--bg-secondary);
                         border-right: 1px solid var(--border); padding: 1rem;
                         display: flex; flex-direction: column; gap: 1.5rem;
-                        overflow-y: auto; flex-shrink: 0; }
-.dashboard-main       { flex: 1; position: relative; overflow: hidden; }
+                        flex-shrink: 0; overflow-y: auto;
+                        overflow-x: hidden;}
+.dashboard-main       { flex: 1; position: relative; overflow: hidden; min-width: 0; }
+
+/* Warning banner for no data (only shown for CO2 family) */
+.family-warning-banner {
+  width:            100%;
+  padding:          .5rem 1rem;
+  background:       rgba(239, 68, 68, 0.15);
+  border-bottom:    1px solid #ef4444;
+  color:            #fca5a5;
+  font-size:        .82rem;
+  font-weight:      500;
+  text-align:       center;
+  flex-shrink:      0;
+}
+
 
 /* ── Family theming ────────────────────────────────────────────────────────────
    All components use var(--accent) — changing it here re-themes everything.   */
@@ -181,4 +196,53 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
 .map-overlay.error    { background: rgba(239,68,68,.15); color: #fca5a5;
                         border: 1px solid #ef4444; }
 
-                        
+/* ── Shared chart panel wrapper ──────────────────────────────────────────────── */
+.chart-panel {
+  border-top: 1px solid var(--border);
+  padding:    .75rem 0 .25rem;
+}
+
+.chart-header {
+  display:       flex;
+  align-items:   center;
+  gap:           .4rem;
+  margin-bottom: .4rem;
+  flex-wrap:     wrap;
+}
+
+.chart-title {
+  font-size:      .68rem;
+  font-weight:    600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color:          var(--text-muted);
+}
+
+.chart-year {
+  font-size:   .68rem;
+  font-weight: 700;
+  color:       var(--accent);
+  margin-left: auto;
+}
+
+.chart-units {
+  font-size: .68rem;
+  color:     var(--text-muted);
+  opacity:   .7;
+}
+
+.chart-status {
+  font-size: .72rem;
+  color:     var(--accent);
+}
+
+.chart-status.error {
+  color: #fca5a5;
+}
+
+/* ── Time series — now in sidebar, remove the border-top override ─────────────*/
+.timeseries-panel {
+  border-top: 1px solid var(--border);
+  padding:    .75rem 0 .25rem;
+  background: transparent;    /* was var(--bg-secondary) when in main area */
+}
