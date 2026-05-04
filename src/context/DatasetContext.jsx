@@ -1,38 +1,27 @@
-import React, { createContext, useContext, useReducer, useCallback, useMemo } from 'react';
+import React, {
+  createContext, useContext, useReducer,
+  useState, useCallback, useMemo
+} from 'react';
 import { getDataset, getAllDatasets, getDatasetsByFamily } from '../config/datasetRegistry';
 import { getFamily, getAllFamilies }                        from '../config/familyRegistry';
-
-// Side-effect imports — families must be registered before datasets
 import '../config/families/index';
 import '../config/datasets/index';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function defaultControls(dataset) {
   return Object.fromEntries(dataset.controls.map(c => [c.key, c.default]));
 }
 
-// ─── Reducer ──────────────────────────────────────────────────────────────────
-
 function reducer(state, action) {
   switch (action.type) {
 
     case 'SET_FAMILY': {
-      const familyId = action.id;
-      const datasetsInFamily = getDatasetsByFamily(familyId);
-
-      if (!datasetsInFamily.length) {
-        console.warn(`No datasets registered for family "${familyId}"`);
-        return state;
-      }
-
-      // Restore the last-used dataset in this family, or fall back to first
-      const restoredId = state.lastDatasetByFamily[familyId] ?? datasetsInFamily[0].id;
+      const datasetsInFamily = getDatasetsByFamily(action.id);
+      if (!datasetsInFamily.length) return state;
+      const restoredId = state.lastDatasetByFamily[action.id] ?? datasetsInFamily[0].id;
       const dataset    = getDataset(restoredId);
-
       return {
         ...state,
-        activeFamily:    familyId,
+        activeFamily:    action.id,
         activeDatasetId: restoredId,
         controls:        defaultControls(dataset),
       };
@@ -44,7 +33,6 @@ function reducer(state, action) {
         ...state,
         activeDatasetId: action.id,
         controls:        defaultControls(dataset),
-        // Remember which dataset was last used within this family
         lastDatasetByFamily: {
           ...state.lastDatasetByFamily,
           [state.activeFamily]: action.id,
@@ -52,30 +40,36 @@ function reducer(state, action) {
       };
     }
 
-    case 'SET_CONTROL':
-      return {
-        ...state,
-        controls: { ...state.controls, [action.key]: action.value },
-      };
+    case 'SET_CONTROL': {
+      const newControls = { ...state.controls, [action.key]: action.value };
+
+      // If satellite changed, snap year to nearest valid option
+      if (action.key === 'satellite') {
+        const dataset     = getDataset(state.activeDatasetId);
+        const yearControl = dataset.controls.find(c => c.key === 'year');
+        if (yearControl?.options && typeof yearControl.options === 'function') {
+          const validYears = yearControl.options(newControls);
+          if (!validYears.includes(newControls.year)) {
+            newControls.year = validYears[validYears.length - 1];
+          }
+        }
+      }
+      return { ...state, controls: newControls };
+    }
 
     default:
       return state;
   }
 }
 
-// ─── Context ──────────────────────────────────────────────────────────────────
-
 const DatasetContext = createContext(null);
 
 export function DatasetProvider({ initialFamilyId, initialDatasetId, children }) {
-  // Resolve initial family + dataset, letting either prop drive the other
   const allFamilies = getAllFamilies();
 
   let resolvedDatasetId, resolvedFamilyId;
-
   if (initialDatasetId) {
-    // Dataset prop takes precedence — derive family from it
-    const ds         = getDataset(initialDatasetId);
+    const ds          = getDataset(initialDatasetId);
     resolvedDatasetId = ds.id;
     resolvedFamilyId  = ds.family;
   } else {
@@ -84,7 +78,6 @@ export function DatasetProvider({ initialFamilyId, initialDatasetId, children })
   }
 
   const initialDataset = getDataset(resolvedDatasetId);
-
   const [state, dispatch] = useReducer(reducer, {
     activeFamily:        resolvedFamilyId,
     activeDatasetId:     resolvedDatasetId,
@@ -92,27 +85,35 @@ export function DatasetProvider({ initialFamilyId, initialDatasetId, children })
     lastDatasetByFamily: { [resolvedFamilyId]: resolvedDatasetId },
   });
 
-  const setActiveFamily  = useCallback((id) => dispatch({ type: 'SET_FAMILY',  id }), []);
-  const setActiveDataset = useCallback((id) => dispatch({ type: 'SET_DATASET', id }), []);
-  const setControl = useCallback(
-    (key, value) => dispatch({ type: 'SET_CONTROL', key, value }),
-    []
-  );
+  // ── Selected state (for map click → chart interaction) ──────────────────────
+  const [selectedState, setSelectedStateRaw] = useState(null);
+
+  // Reset selected state when dataset or mode changes
+  const setSelectedState = useCallback((stateName) => {
+    setSelectedStateRaw(stateName);
+  }, []);
+
+  const setActiveFamily  = useCallback((id) => { dispatch({ type: 'SET_FAMILY',  id }); setSelectedStateRaw(null); }, []);
+  const setActiveDataset = useCallback((id) => { dispatch({ type: 'SET_DATASET', id }); setSelectedStateRaw(null); }, []);
+  const setControl = useCallback((key, value) => {
+    dispatch({ type: 'SET_CONTROL', key, value });
+    if (key === 'mode') setSelectedStateRaw(null);
+  }, []);
 
   const value = useMemo(() => ({
-    // Family
     activeFamily:           getFamily(state.activeFamily),
     allFamilies,
     datasetsInActiveFamily: getDatasetsByFamily(state.activeFamily),
     setActiveFamily,
-    // Dataset
     activeDataset:  getDataset(state.activeDatasetId),
     allDatasets:    getAllDatasets(),
     setActiveDataset,
-    // Controls
-    controls:  state.controls,
+    controls:       state.controls,
     setControl,
-  }), [state, allFamilies, setActiveFamily, setActiveDataset, setControl]);
+    // ── NEW ──
+    selectedState,
+    setSelectedState,
+  }), [state, allFamilies, selectedState, setActiveFamily, setActiveDataset, setControl, setSelectedState]);
 
   return (
     <DatasetContext.Provider value={value}>

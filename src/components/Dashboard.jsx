@@ -28,7 +28,6 @@ export function Dashboard() {
       <div className="dashboard-body">
         <aside className="dashboard-sidebar">
 
-          {/* ── Top: identity + controls ───────────────────────────────── */}
           <div className="dataset-info">
             <span className="dataset-family-badge">{activeFamily.label}</span>
             <h2>{activeDataset.name}</h2>
@@ -38,14 +37,11 @@ export function Dashboard() {
           <DatasetSelector />
           <ControlPanel />
           <Legend />
-
-          {/* ── Bottom: charts (only render when data configs exist) ───── */}
           <SectorBarChart />
           <TimeSeriesPlot />
 
         </aside>
 
-        {/* Map takes full remaining height — no sharing with charts */}
         <main className="dashboard-main">
           <MapView />
         </main>

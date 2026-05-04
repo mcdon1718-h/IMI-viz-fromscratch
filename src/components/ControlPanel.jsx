@@ -1,7 +1,6 @@
 import React from 'react';
 import { useDatasetContext } from '../context/DatasetContext';
-
-// ─── Generic renderer map ─────────────────────────────────────────────────────
+import { useEmissionData }   from '../hooks/useEmissionData';
 
 const ControlRenderers = {
   slider:      SliderControl,
@@ -10,10 +9,9 @@ const ControlRenderers = {
   multiselect: MultiSelectControl,
 };
 
-// ─── Main panel ───────────────────────────────────────────────────────────────
-
 export function ControlPanel() {
   const { activeDataset, controls, setControl } = useDatasetContext();
+  const { data: baseData } = useEmissionData();
 
   return (
     <div className="control-panel">
@@ -22,11 +20,20 @@ export function ControlPanel() {
       {activeDataset.controls.map(def => {
         const Renderer = ControlRenderers[def.type];
         if (!Renderer) return null;
+
+        // Resolve options — static array, function of controls, or function of loaded data
+        let options = def.options;
+        if (typeof options === 'function') options = options(controls);
+        if (def.getOptions) options = def.getOptions(baseData);
+
+        // Don't render until dynamic options are available
+        if (!options || options.length === 0) return null;
+
         return (
           <div key={def.key} className="control-group">
             <label className="control-label">{def.label}</label>
             <Renderer
-              def={def}
+              def={{ ...def, options }}
               value={controls[def.key]}
               onChange={v => setControl(def.key, v)}
             />
@@ -45,7 +52,7 @@ function SliderControl({ def, value, onChange }) {
   const max = options[options.length - 1];
 
   function handleChange(e) {
-    const raw = Number(e.target.value);
+    const raw     = Number(e.target.value);
     const snapped = options.reduce((a, b) =>
       Math.abs(b - raw) < Math.abs(a - raw) ? b : a
     );
@@ -110,11 +117,7 @@ function RadioControl({ def, value, onChange }) {
 
 function MultiSelectControl({ def, value = [], onChange }) {
   function toggle(v) {
-    onChange(
-      value.includes(v)
-        ? value.filter(x => x !== v)
-        : [...value, v]
-    );
+    onChange(value.includes(v) ? value.filter(x => x !== v) : [...value, v]);
   }
   return (
     <div className="radio-control">

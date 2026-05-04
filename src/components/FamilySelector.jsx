@@ -16,8 +16,6 @@ export function FamilySelector() {
             className={`family-tab ${isActive ? 'active' : ''}`}
             onClick={() => setActiveFamily(family.id)}
             title={family.description}
-            // Inline accent lets each button keep its own color regardless of
-            // which family is currently active (gives users a persistent cue)
             style={{ '--tab-accent': family.theme.accent }}
           >
             <span className="family-tab-formula">{family.label}</span>
