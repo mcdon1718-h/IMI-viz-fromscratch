@@ -10,7 +10,11 @@ const ControlRenderers = {
 };
 
 export function ControlPanel() {
+<<<<<<< HEAD
   const { activeDataset, controls, setControl, selectedState } = useDatasetContext();
+=======
+  const { activeDataset, controls, setControl, selectedState} = useDatasetContext();
+>>>>>>> 1111847a6cce5865146817b10c45770612866944
   const { data: baseData } = useEmissionData();
 
   return (
@@ -18,9 +22,15 @@ export function ControlPanel() {
       <span className="control-panel-title">Filters</span>
 
       {activeDataset.controls.map(def => {
+<<<<<<< HEAD
         // Hide controls whose visible predicate returns false
         if (def.visible && !def.visible(controls, { selectedState })) return null;
 
+=======
+        // hide controls that don't apply to current mode
+        if (def.visible && !def.visible(controls, { selectedState })) return null;
+        
+>>>>>>> 1111847a6cce5865146817b10c45770612866944
         const Renderer = ControlRenderers[def.type];
         if (!Renderer) return null;
 
@@ -72,6 +82,10 @@ function SliderControl({ def, value, onChange }) {
       <datalist id={`ticks-${def.key}`}>
         {options.map(v => <option key={v} value={v} />)}
       </datalist>
+<<<<<<< HEAD
+=======
+      {/* NEW: use format fn if provided */}
+>>>>>>> 1111847a6cce5865146817b10c45770612866944
       <span className="slider-value">
         {def.format ? def.format(value) : value}
       </span>

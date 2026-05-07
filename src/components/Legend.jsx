@@ -18,8 +18,12 @@ export function Legend() {
 
   const rasterDomain = useMemo(() => {
     if (!isGrid || !baseData?.manifest) return null;
-    return getGlobalDomain(baseData.manifest, controls.sector);
-  }, [isGrid, baseData, controls.sector]);
+    const global = getGlobalDomain(baseData.manifest, controls.sector);
+    return {
+      min: global.min,
+      max: global.max * (controls.maxEmission ?? 1.0),
+    };
+  }, [isGrid, baseData, controls.sector, controls.maxEmission]);
 
   const choroplethDomain = useMemo(() => {
     if (!isChoropleth || !baseData) return null;

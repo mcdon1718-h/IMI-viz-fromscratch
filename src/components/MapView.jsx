@@ -42,6 +42,7 @@ function ylorrd(t) {
 // }
 
 // ─── GeoRasterOverlay ─────────────────────────────────────────────────────────
+<<<<<<< HEAD
 // Mirrors app.js pattern:
 //   pixelValuesToColorFn reads from refs (like app.js reads state.gridDisplayMax)
 //   so redraw() picks up changes without rebuilding the layer.
@@ -55,9 +56,28 @@ function GeoRasterOverlay({ tifUrl, globalDomain, displayMax, opacity }) {
     const p = map.createPane('rasterPane');
     p.style.zIndex        = '250';
     p.style.pointerEvents = 'none';
+=======
+function GeoRasterOverlay({ tifUrl, globalDomain, displayMax, opacity = 0.7 }) {
+  const map          = useMap();
+  const layerRef     = useRef(null);
+  const georasterRef = useRef(null);
+
+  // Refs so buildLayer always reads current prop values — no stale closures
+  const displayMaxRef  = useRef(displayMax);
+  const globalDomRef   = useRef(globalDomain);
+  const opacityRef     = useRef(opacity);
+
+  displayMaxRef.current = displayMax;
+  globalDomRef.current  = globalDomain;
+  opacityRef.current    = opacity;
+
+  function removeLayer() {
+    if (layerRef.current) { map.removeLayer(layerRef.current); layerRef.current = null; }
+>>>>>>> 1111847a6cce5865146817b10c45770612866944
   }
 }
 
+<<<<<<< HEAD
 // Bypass map.hasLayer() — directly wipe the pane's DOM contents
 // and discard the ref. Guarantees the old layer is gone.
 function removeLayer() {
@@ -70,6 +90,28 @@ function removeLayer() {
 }
 
   // Effect 1: TIF file changed (sector / year / satellite) — fetch or cache, then build
+=======
+  // Build a fresh layer from an already-parsed georaster (no fetch)
+  function buildLayer(georaster) {
+    removeLayer();
+    layerRef.current = new GeoRasterLayer({
+      georaster,
+      opacity:    opacityRef.current,
+      resolution: 256,
+      pixelValuesToColorFn: (vals) => {
+        const v = vals?.[0];
+        if (v == null || isNaN(v) || v <= 0) return null;
+        const min   = globalDomRef.current.min;
+        const max   = displayMaxRef.current;
+        const range = (max - min) || 1;
+        return ylorrd(Math.max(0, Math.min(1, (v - min) / range)));
+      },
+    });
+    layerRef.current.addTo(map);
+  }
+
+  // Effect 1: TIF URL changed — fetch or cache hit, then build
+>>>>>>> 1111847a6cce5865146817b10c45770612866944
   useEffect(() => {
     if (!tifUrl) { removeLayer(); georasterRef.current = null; return; }
     let cancelled = false;
@@ -85,14 +127,20 @@ function removeLayer() {
         let georaster = tifCache.get(tifUrl);
         if (!georaster) {
           const resp = await fetch(tifUrl);
+<<<<<<< HEAD
           const ct   = resp.headers.get('content-type') ?? '';
           if (!resp.ok || ct.includes('text/html'))
             throw new Error(`TIF not available: ${tifUrl}`);
           georaster = await parseGeoraster(await resp.arrayBuffer());
+=======
+          if (!resp.ok) throw new Error(`TIF not found: ${tifUrl}`);
+          georaster  = await parseGeoraster(await resp.arrayBuffer());
+>>>>>>> 1111847a6cce5865146817b10c45770612866944
           tifCache.set(tifUrl, georaster);
         }
         if (cancelled) return;
         georasterRef.current = georaster;
+<<<<<<< HEAD
         removeLayer();
         ensurePane();
         layerRef.current = new GeoRasterLayer({
@@ -109,12 +157,16 @@ function removeLayer() {
           },
         });
         layerRef.current.addTo(map);
+=======
+        buildLayer(georaster);
+>>>>>>> 1111847a6cce5865146817b10c45770612866944
       } catch (err) {
         if (!cancelled) console.error('[TIF]', err.message);
       }
     }
 
     load();
+<<<<<<< HEAD
     return () => {
       cancelled            = true;
       georasterRef.current = null;  // prevent Effect 2 using stale georaster
@@ -151,6 +203,15 @@ function removeLayer() {
       },
     });
     layerRef.current.addTo(map);
+=======
+    return () => { cancelled = true; removeLayer(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tifUrl]);
+
+  // Effect 2: displayMax changed — rebuild from cached georaster, no fetch
+  useEffect(() => {
+    if (georasterRef.current) buildLayer(georasterRef.current);
+>>>>>>> 1111847a6cce5865146817b10c45770612866944
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayMax]);
 
