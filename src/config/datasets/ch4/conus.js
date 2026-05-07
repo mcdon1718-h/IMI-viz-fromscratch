@@ -21,56 +21,6 @@ registerDataset({
   },
 
   controls: [
-<<<<<<< HEAD
-    {
-      key:     'satellite',
-      label:   'Data Source',
-      type:    'select',
-      options: [
-        { value: 'ghgi_tropomi', label: 'GHGI + TROPOMI (Posterior)' },
-        { value: 'ghgi',         label: 'GHGI Only (Prior)'          },
-      ],
-      default: 'ghgi_tropomi',
-    },
-    {
-      key:     'year',
-      label:   'Year',
-      type:    'slider',
-      options: (controls) =>
-        controls.satellite === 'ghgi'
-          ? [2019, 2020]
-          : [2019, 2020, 2021, 2022, 2023, 2024],
-      default: 2022,
-    },
-    {
-      key:        'sector',
-      label:      'Sector',
-      type:       'select',
-      getOptions: (baseData) =>
-        (baseData?.sectorKeys ?? []).map(s => ({ value: s, label: labelSector(s) })),
-      default: 'Total_ExclSoilAbs',
-    },
-    // ── Grid-only controls (hidden in choropleth mode) ──────────────────────
-    {
-      key:     'opacity',
-      label:   'Layer Opacity',
-      type:    'slider',
-      options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-      default: 0.7,
-      format:  v => `${Math.round(v * 100)}%`,
-      visible: (_controls, { selectedState }) => selectedState !== null,
-    },
-    {
-      key:     'maxEmission',
-      label:   'Color Scale Max',
-      type:    'slider',
-      options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 2.0],
-      default: 1.0,
-      format:  v => `${Math.round(v * 100)}%`,
-      visible: (_controls, { selectedState }) => selectedState !== null,
-    },
-  ],
-=======
   {
     key:     'satellite',
     label:   'Data Source',
@@ -118,7 +68,6 @@ registerDataset({
     visible: (_controls, { selectedState }) => selectedState !== null,
   },
 ],
->>>>>>> 1111847a6cce5865146817b10c45770612866944
 
   display: {
     units:       'Tg/yr',
