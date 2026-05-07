@@ -10,7 +10,7 @@ const ControlRenderers = {
 };
 
 export function ControlPanel() {
-  const { activeDataset, controls, setControl } = useDatasetContext();
+  const { activeDataset, controls, setControl, selectedState} = useDatasetContext();
   const { data: baseData } = useEmissionData();
 
   return (
@@ -18,6 +18,9 @@ export function ControlPanel() {
       <span className="control-panel-title">Filters</span>
 
       {activeDataset.controls.map(def => {
+        // hide controls that don't apply to current mode
+        if (def.visible && !def.visible(controls, { selectedState })) return null;
+        
         const Renderer = ControlRenderers[def.type];
         if (!Renderer) return null;
 
@@ -65,6 +68,7 @@ function SliderControl({ def, value, onChange }) {
         type="range"
         min={min}
         max={max}
+        step={(max - min) / (options.length - 1)}
         value={value}
         onChange={handleChange}
         list={`ticks-${def.key}`}
@@ -72,7 +76,10 @@ function SliderControl({ def, value, onChange }) {
       <datalist id={`ticks-${def.key}`}>
         {options.map(v => <option key={v} value={v} />)}
       </datalist>
-      <span className="slider-value">{value}</span>
+      {/* NEW: use format fn if provided */}
+      <span className="slider-value">
+        {def.format ? def.format(value) : value}
+      </span>
     </div>
   );
 }

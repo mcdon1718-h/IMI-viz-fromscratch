@@ -49,6 +49,24 @@ registerDataset({
       (baseData?.sectorKeys ?? []).map(s => ({ value: s, label: labelSector(s) })),
     default: 'Total_ExclSoilAbs',
   },
+  {
+    key:     'opacity',
+    label:   'Layer Opacity',
+    type:    'slider',
+    options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+    default: 0.7,
+    format:  v => `${Math.round(v * 100)}%`,      // shows "70%" instead of "0.7"
+    visible: (_controls, { selectedState }) => selectedState !== null,
+  },
+  {
+    key:     'maxEmission',
+    label:   'Color Scale Max',
+    type:    'slider',
+    options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 2.0],
+    default: 1.0,
+    format:  v => `${Math.round(v * 100)}%`,
+    visible: (_controls, { selectedState }) => selectedState !== null,
+  },
 ],
 
   display: {

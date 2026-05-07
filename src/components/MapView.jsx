@@ -10,7 +10,7 @@ import {
   parseNumber,
   centralCol,
   computeChoroplethDomain,
-}                                                          from '../utils/emissionsUtils';
+} from '../utils/emissionsUtils';
 
 // ─── TIF cache ────────────────────────────────────────────────────────────────
 const tifCache = new Map();
@@ -40,20 +40,46 @@ function ylorrd(t) {
 }
 
 // ─── GeoRasterOverlay ─────────────────────────────────────────────────────────
-function GeoRasterOverlay({ tifUrl, domain, opacity = 0.4 }) {
-  const map      = useMap();
-  const layerRef = useRef(null);
+function GeoRasterOverlay({ tifUrl, globalDomain, displayMax, opacity = 0.7 }) {
+  const map          = useMap();
+  const layerRef     = useRef(null);
+  const georasterRef = useRef(null);
+
+  // Refs so buildLayer always reads current prop values — no stale closures
+  const displayMaxRef  = useRef(displayMax);
+  const globalDomRef   = useRef(globalDomain);
+  const opacityRef     = useRef(opacity);
+
+  displayMaxRef.current = displayMax;
+  globalDomRef.current  = globalDomain;
+  opacityRef.current    = opacity;
 
   function removeLayer() {
-    if (layerRef.current) {
-      map.removeLayer(layerRef.current);
-      layerRef.current = null;
-    }
+    if (layerRef.current) { map.removeLayer(layerRef.current); layerRef.current = null; }
   }
 
-  useEffect(() => {
-    if (!tifUrl) { removeLayer(); return; }
+  // Build a fresh layer from an already-parsed georaster (no fetch)
+  function buildLayer(georaster) {
+    removeLayer();
+    layerRef.current = new GeoRasterLayer({
+      georaster,
+      opacity:    opacityRef.current,
+      resolution: 256,
+      pixelValuesToColorFn: (vals) => {
+        const v = vals?.[0];
+        if (v == null || isNaN(v) || v <= 0) return null;
+        const min   = globalDomRef.current.min;
+        const max   = displayMaxRef.current;
+        const range = (max - min) || 1;
+        return ylorrd(Math.max(0, Math.min(1, (v - min) / range)));
+      },
+    });
+    layerRef.current.addTo(map);
+  }
 
+  // Effect 1: TIF URL changed — fetch or cache hit, then build
+  useEffect(() => {
+    if (!tifUrl) { removeLayer(); georasterRef.current = null; return; }
     let cancelled = false;
 
     async function load() {
@@ -62,28 +88,12 @@ function GeoRasterOverlay({ tifUrl, domain, opacity = 0.4 }) {
         if (!georaster) {
           const resp = await fetch(tifUrl);
           if (!resp.ok) throw new Error(`TIF not found: ${tifUrl}`);
-          georaster = await parseGeoraster(await resp.arrayBuffer());
+          georaster  = await parseGeoraster(await resp.arrayBuffer());
           tifCache.set(tifUrl, georaster);
         }
-
         if (cancelled) return;
-        removeLayer();
-
-        const { min, max } = domain;
-        const range = (max - min) || 1;
-
-        layerRef.current = new GeoRasterLayer({
-          georaster,
-          opacity,
-          resolution: 256,
-          pixelValuesToColorFn: (vals) => {
-            const v = vals?.[0];
-            if (v == null || isNaN(v) || v <= 0) return null;
-            return ylorrd(Math.max(0, Math.min(1, (v - min) / range)));
-          },
-        });
-
-        layerRef.current.addTo(map);
+        georasterRef.current = georaster;
+        buildLayer(georaster);
       } catch (err) {
         console.error('[GeoRasterOverlay] failed:', err.message);
       }
@@ -91,9 +101,19 @@ function GeoRasterOverlay({ tifUrl, domain, opacity = 0.4 }) {
 
     load();
     return () => { cancelled = true; removeLayer(); };
-
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tifUrl, domain.min, domain.max, opacity]);
+  }, [tifUrl]);
+
+  // Effect 2: displayMax changed — rebuild from cached georaster, no fetch
+  useEffect(() => {
+    if (georasterRef.current) buildLayer(georasterRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayMax]);
+
+  // Effect 3: opacity only — instant, no rebuild
+  useEffect(() => {
+    if (layerRef.current) layerRef.current.setOpacity(opacity);
+  }, [opacity]);
 
   return null;
 }
@@ -166,9 +186,11 @@ export function MapView() {
     ? getManifestEntry(baseData.manifest, controls.sector, controls.year, controls.satellite)
     : null;
 
-  const rasterDomain = baseData?.manifest
+  const globalDomain = baseData?.manifest
     ? getGlobalDomain(baseData.manifest, controls.sector)
     : { min: 0, max: 1 };
+
+  const displayMax = globalDomain.max * (controls.maxEmission ?? 1.0);
 
   const tifUrl = (isGrid && manifestEntry)
     ? resolveTifUrl(activeDataset.dataRoot, manifestEntry.tif)
@@ -219,8 +241,9 @@ export function MapView() {
           <GeoRasterOverlay
             key={tifUrl}
             tifUrl={tifUrl}
-            domain={rasterDomain}
-            opacity={0.4}
+            globalDomain={globalDomain}
+            displayMax={displayMax}
+            opacity={controls.opacity ?? 0.7}
           />
         )}
 
