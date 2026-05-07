@@ -82,10 +82,7 @@ function SliderControl({ def, value, onChange }) {
       <datalist id={`ticks-${def.key}`}>
         {options.map(v => <option key={v} value={v} />)}
       </datalist>
-<<<<<<< HEAD
-=======
-      {/* NEW: use format fn if provided */}
->>>>>>> 1111847a6cce5865146817b10c45770612866944
+      
       <span className="slider-value">
         {def.format ? def.format(value) : value}
       </span>
