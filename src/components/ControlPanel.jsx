@@ -10,7 +10,7 @@ const ControlRenderers = {
 };
 
 export function ControlPanel() {
-  const { activeDataset, controls, setControl } = useDatasetContext();
+  const { activeDataset, controls, setControl, selectedState } = useDatasetContext();
   const { data: baseData } = useEmissionData();
 
   return (
@@ -18,15 +18,16 @@ export function ControlPanel() {
       <span className="control-panel-title">Filters</span>
 
       {activeDataset.controls.map(def => {
+        // Hide controls whose visible predicate returns false
+        if (def.visible && !def.visible(controls, { selectedState })) return null;
+
         const Renderer = ControlRenderers[def.type];
         if (!Renderer) return null;
 
-        // Resolve options — static array, function of controls, or function of loaded data
         let options = def.options;
         if (typeof options === 'function') options = options(controls);
         if (def.getOptions) options = def.getOptions(baseData);
 
-        // Don't render until dynamic options are available
         if (!options || options.length === 0) return null;
 
         return (
@@ -43,8 +44,6 @@ export function ControlPanel() {
     </div>
   );
 }
-
-// ─── Control primitives ───────────────────────────────────────────────────────
 
 function SliderControl({ def, value, onChange }) {
   const { options } = def;
@@ -65,6 +64,7 @@ function SliderControl({ def, value, onChange }) {
         type="range"
         min={min}
         max={max}
+        step={(max - min) / (options.length - 1)}
         value={value}
         onChange={handleChange}
         list={`ticks-${def.key}`}
@@ -72,7 +72,9 @@ function SliderControl({ def, value, onChange }) {
       <datalist id={`ticks-${def.key}`}>
         {options.map(v => <option key={v} value={v} />)}
       </datalist>
-      <span className="slider-value">{value}</span>
+      <span className="slider-value">
+        {def.format ? def.format(value) : value}
+      </span>
     </div>
   );
 }
@@ -85,9 +87,7 @@ function SelectControl({ def, value, onChange }) {
       onChange={e => onChange(e.target.value)}
     >
       {def.options.map(opt => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
       ))}
     </select>
   );

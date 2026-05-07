@@ -10,22 +10,15 @@ import {
   parseNumber,
   centralCol,
   computeChoroplethDomain,
-}                                                          from '../utils/emissionsUtils';
+} from '../utils/emissionsUtils';
 
 // ─── TIF cache ────────────────────────────────────────────────────────────────
 const tifCache = new Map();
 
 // ─── YlOrRd colormap ─────────────────────────────────────────────────────────
 const YLORRD = [
-  [255, 255, 204],
-  [255, 237, 160],
-  [254, 217, 118],
-  [254, 178,  76],
-  [253, 141,  60],
-  [252,  78,  42],
-  [227,  26,  28],
-  [189,   0,  38],
-  [128,   0,  38],
+  [255, 255, 204], [255, 237, 160], [254, 217, 118], [254, 178,  76],
+  [253, 141,  60], [252,  78,  42], [227,  26,  28], [189,   0,  38], [128,   0,  38],
 ];
 
 function ylorrd(t) {
@@ -34,85 +27,151 @@ function ylorrd(t) {
   const f  = t * n - i;
   const c0 = YLORRD[i];
   const c1 = YLORRD[i + 1];
-  return `rgb(${Math.round(c0[0] + f * (c1[0] - c0[0]))},${
-               Math.round(c0[1] + f * (c1[1] - c0[1]))},${
-               Math.round(c0[2] + f * (c1[2] - c0[2]))})`;
+  return `rgb(${Math.round(c0[0] + f*(c1[0]-c0[0]))},${
+               Math.round(c0[1] + f*(c1[1]-c0[1]))},${
+               Math.round(c0[2] + f*(c1[2]-c0[2]))})`;
 }
 
+// Add this above GeoRasterOverlay — runs once per map instance
+// function ensureRasterPane(map) {
+//   if (!map.getPane('rasterPane')) {
+//     const pane = map.createPane('rasterPane');
+//     pane.style.zIndex      = '250'; // above tilePane (200), below overlayPane/GeoJSON (400)
+//     pane.style.pointerEvents = 'none';
+//   }
+// }
+
 // ─── GeoRasterOverlay ─────────────────────────────────────────────────────────
-function GeoRasterOverlay({ tifUrl, domain, opacity = 0.4 }) {
-  const map      = useMap();
-  const layerRef = useRef(null);
+// Mirrors app.js pattern:
+//   pixelValuesToColorFn reads from refs (like app.js reads state.gridDisplayMax)
+//   so redraw() picks up changes without rebuilding the layer.
+function GeoRasterOverlay({ tifUrl, globalDomain, displayMax, opacity }) {
+  const map          = useMap();
+  const layerRef     = useRef(null);
+  const georasterRef = useRef(null);
 
-  function removeLayer() {
-    if (layerRef.current) {
-      map.removeLayer(layerRef.current);
-      layerRef.current = null;
-    }
+  function ensurePane() {
+  if (!map.getPane('rasterPane')) {
+    const p = map.createPane('rasterPane');
+    p.style.zIndex        = '250';
+    p.style.pointerEvents = 'none';
   }
+}
 
+// Bypass map.hasLayer() — directly wipe the pane's DOM contents
+// and discard the ref. Guarantees the old layer is gone.
+function removeLayer() {
+  if (layerRef.current) {
+    try { map.removeLayer(layerRef.current); } catch (_) {}
+    layerRef.current = null;
+  }
+  const pane = map.getPane('rasterPane');
+  if (pane) pane.innerHTML = '';
+}
+
+  // Effect 1: TIF file changed (sector / year / satellite) — fetch or cache, then build
   useEffect(() => {
-    if (!tifUrl) { removeLayer(); return; }
-
+    if (!tifUrl) { removeLayer(); georasterRef.current = null; return; }
     let cancelled = false;
+
+    // Snapshot current render values into local vars — baked into pixelValuesToColorFn
+    const min   = globalDomain.min;
+    const max   = displayMax;
+    const range = (max - min) || 1;
+    const op    = opacity;
 
     async function load() {
       try {
         let georaster = tifCache.get(tifUrl);
         if (!georaster) {
           const resp = await fetch(tifUrl);
-          if (!resp.ok) throw new Error(`TIF not found: ${tifUrl}`);
+          const ct   = resp.headers.get('content-type') ?? '';
+          if (!resp.ok || ct.includes('text/html'))
+            throw new Error(`TIF not available: ${tifUrl}`);
           georaster = await parseGeoraster(await resp.arrayBuffer());
           tifCache.set(tifUrl, georaster);
         }
-
         if (cancelled) return;
+        georasterRef.current = georaster;
         removeLayer();
-
-        const { min, max } = domain;
-        const range = (max - min) || 1;
-
+        ensurePane();
         layerRef.current = new GeoRasterLayer({
           georaster,
-          opacity,
+          opacity: op,
           resolution: 256,
+          pane: 'rasterPane',
+          updateWhenZooming: false,
+          keepBuffer: 4,
           pixelValuesToColorFn: (vals) => {
             const v = vals?.[0];
             if (v == null || isNaN(v) || v <= 0) return null;
             return ylorrd(Math.max(0, Math.min(1, (v - min) / range)));
           },
         });
-
         layerRef.current.addTo(map);
       } catch (err) {
-        console.error('[GeoRasterOverlay] failed:', err.message);
+        if (!cancelled) console.error('[TIF]', err.message);
       }
     }
 
     load();
-    return () => { cancelled = true; removeLayer(); };
-
+    return () => {
+      cancelled            = true;
+      georasterRef.current = null;  // prevent Effect 2 using stale georaster
+      removeLayer();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tifUrl, domain.min, domain.max, opacity]);
+  }, [tifUrl]);
+
+  // Effect 2: colormap max slider moved — rebuild from cached georaster (no fetch)
+  // Completely self-contained: min/max/range snapshotted from THIS render's closure,
+  // so pixelValuesToColorFn always gets the value that was current when the effect ran.
+  useEffect(() => {
+    const georaster = georasterRef.current;
+    if (!georaster) return;
+
+    const min   = globalDomain.min;
+    const max   = displayMax;
+    const range = (max - min) || 1;
+    const op    = opacity;
+
+    removeLayer();
+    ensurePane();
+    layerRef.current = new GeoRasterLayer({
+      georaster,
+      opacity: op,
+      resolution: 256,
+      pane: 'rasterPane',
+      updateWhenZooming: false,
+      keepBuffer: 4,
+      pixelValuesToColorFn: (vals) => {
+        const v = vals?.[0];
+        if (v == null || isNaN(v) || v <= 0) return null;
+        return ylorrd(Math.max(0, Math.min(1, (v - min) / range)));
+      },
+    });
+    layerRef.current.addTo(map);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayMax]);
+
+  // Effect 3: opacity only — instant, no rebuild
+  useEffect(() => {
+    if (layerRef.current) layerRef.current.setOpacity(opacity);
+  }, [opacity]);
 
   return null;
 }
 
 // ─── StatesLayer ──────────────────────────────────────────────────────────────
 function StatesLayer({ geojson, selectedState, onStateClick, choroplethFn }) {
-
   const styleFeature = useCallback((feature) => {
     const name       = getStateName(feature);
     const isSelected = name === selectedState;
-
-    let fillColor   = 'transparent';
-    let fillOpacity = 0;
-
+    let fillColor = 'transparent', fillOpacity = 0;
     if (choroplethFn) {
       const color = choroplethFn(name);
       if (color) { fillColor = color; fillOpacity = 0.75; }
     }
-
     return {
       fillColor,
       fillOpacity,
@@ -155,26 +214,28 @@ export function MapView() {
   } = useDatasetContext();
 
   const { data: baseData, loading, error } = useEmissionData();
-  const { mapConfig }                       = activeDataset;
-  const { initialViewState: ivs }           = mapConfig;
+  const { mapConfig }         = activeDataset;
+  const { initialViewState: ivs } = mapConfig;
 
   const isChoropleth = selectedState === null;
   const isGrid       = selectedState !== null;
 
-  // ── Raster setup ───────────────────────────────────────────────────────────
+  // ── Raster — declared in dependency order ─────────────────────────────────
   const manifestEntry = baseData?.manifest
     ? getManifestEntry(baseData.manifest, controls.sector, controls.year, controls.satellite)
     : null;
 
-  const rasterDomain = baseData?.manifest
+  const globalDomain = baseData?.manifest
     ? getGlobalDomain(baseData.manifest, controls.sector)
     : { min: 0, max: 1 };
+
+  const displayMax = globalDomain.max * (controls.maxEmission ?? 1.0);
 
   const tifUrl = (isGrid && manifestEntry)
     ? resolveTifUrl(activeDataset.dataRoot, manifestEntry.tif)
     : null;
 
-  // ── Choropleth setup ───────────────────────────────────────────────────────
+  // ── Choropleth ────────────────────────────────────────────────────────────
   const choroplethDomain = useMemo(() => {
     if (!isChoropleth || !baseData) return null;
     return computeChoroplethDomain(
@@ -217,10 +278,10 @@ export function MapView() {
 
         {isGrid && tifUrl && (
           <GeoRasterOverlay
-            key={tifUrl}
             tifUrl={tifUrl}
-            domain={rasterDomain}
-            opacity={0.4}
+            globalDomain={globalDomain}
+            displayMax={displayMax}
+            opacity={controls.opacity ?? 0.7}
           />
         )}
 
