@@ -9,12 +9,13 @@ const GRADIENT = `linear-gradient(to right,
   #fd8d3c, #fc4e2a, #e31a1c, #bd0026, #800026)`;
 
 export function Legend() {
-  const { activeDataset, controls, selectedState } = useDatasetContext();
-  const { data: baseData }                         = useEmissionData();
-  const { display }                                = activeDataset;
+  const { activeDataset, controls } = useDatasetContext();  // ← removed selectedState
+  const { data: baseData }          = useEmissionData();
+  const { display }                 = activeDataset;
 
-  const isChoropleth = selectedState === null;
-  const isGrid       = selectedState !== null;
+  // ── Derive mode from control, not from selectedState ─────────────────────
+  const isGrid       = controls.viewMode === 'grid';
+  const isChoropleth = !isGrid;
 
   const rasterDomain = useMemo(() => {
     if (!isGrid || !baseData?.manifest) return null;
