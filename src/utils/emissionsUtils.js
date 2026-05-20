@@ -13,6 +13,11 @@ export const SECTOR_LABELS = {
   ONG:               'Oil/Gas',
   Livestock:         'Livestock',
   Total_ExclSoilAbs: 'Total',
+  // Colombia sector keys
+  TotalAnth:         'Total',
+  OilGas:            'Oil/Gas',
+  Waste:             'Waste',
+  Other:             'Other',
 };
 
 // ─── CSV fetch ────────────────────────────────────────────────────────────────

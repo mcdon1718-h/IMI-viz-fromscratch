@@ -3,6 +3,8 @@ import { useDatasetContext } from '../context/DatasetContext';
 import { useEmissionData }   from '../hooks/useEmissionData';
 import { parseNumber }       from '../utils/emissionsUtils';
 
+const SUPPORTED = new Set(['ch4-conus', 'ch4-colombia']);
+
 export function DataTotals() {
   const { activeDataset, controls, selectedState } = useDatasetContext();
   const { data: baseData } = useEmissionData();
@@ -12,9 +14,22 @@ export function DataTotals() {
 
   const { totalPost, anthroPost } = useMemo(() => {
     const empty = { totalPost: null, anthroPost: null };
-    if (activeDataset.id !== 'ch4-conus' || !baseData) return empty;
+    if (!SUPPORTED.has(activeDataset.id) || !baseData) return empty;
 
-    /* ── National: use pre-computed columns from the national CSV ──────── */
+    // ── Colombia ────────────────────────────────────────────────────────────
+    // All Colombia sectors are anthropogenic (no wetlands), so total = anthro
+    if (activeDataset.id === 'ch4-colombia') {
+      if (!isState) {
+        const row = baseData.nationalPosterior?.[year];
+        const v   = parseNumber(row?.TotalAnth);
+        return { totalPost: v, anthroPost: v };
+      }
+      const row = baseData.byYear?.[year]?.[selectedState];
+      const v   = parseNumber(row?.TotalAnth_posterior);
+      return { totalPost: v, anthroPost: v };
+    }
+
+    // ── CONUS national ──────────────────────────────────────────────────────
     if (!isState) {
       const row = satellite === 'ghgi'
         ? baseData.nationalPrior?.[year]
@@ -26,7 +41,7 @@ export function DataTotals() {
       };
     }
 
-    /* ── State: sum sector posterior/prior columns ─────────────────────── */
+    // ── CONUS state ─────────────────────────────────────────────────────────
     const { sectorKeys } = baseData;
     if (!sectorKeys?.length) return empty;
 
@@ -35,7 +50,6 @@ export function DataTotals() {
       : baseData.byYear?.[year]?.[selectedState];
     if (!row) return empty;
 
-    // ghgi prior CSV uses bare keys; posterior CSV uses _posterior suffix
     const getVal = (s) => {
       const raw = satellite === 'ghgi' ? row[s] : row[`${s}_posterior`];
       const v   = parseNumber(raw);
@@ -53,24 +67,24 @@ export function DataTotals() {
     };
   }, [activeDataset.id, baseData, year, satellite, isState, selectedState]);
 
-  // Only render for the ch4-conus dataset once data is loaded
-  if (activeDataset.id !== 'ch4-conus' || !baseData) return null;
+  if (!SUPPORTED.has(activeDataset.id) || !baseData) return null;
 
   const units      = activeDataset.display.units;
-  const fmt        = (v) => (v != null && Number.isFinite(v)) ? v.toFixed(2) : '—';
-  const placeLabel = (selectedState ?? 'National').toUpperCase();
+  const fmt        = v => (v != null && Number.isFinite(v)) ? v.toFixed(2) : '—';
+
+  const placeLabel = selectedState
+    ? selectedState.toUpperCase()
+    : activeDataset.id === 'ch4-colombia' ? 'COLOMBIA' : 'NATIONAL';
 
   return (
     <div className="data-totals-panel">
       <div className="data-totals-place">{placeLabel}</div>
 
       <div className="data-totals-table">
-        {/* Column headers */}
         <div className="dtc-spacer" />
         <div className="dtc-header">Bottom-up</div>
         <div className="dtc-header">Posterior</div>
 
-        {/* Anthropogenic row */}
         <div className="dtc-label">Anthropogenic</div>
         <div className="dtc-num dtc-dim">—</div>
         <div className="dtc-num dtc-accent">
@@ -78,7 +92,6 @@ export function DataTotals() {
           {anthroPost != null && <span className="dtc-units"> {units}</span>}
         </div>
 
-        {/* Total row */}
         <div className="dtc-label">Total</div>
         <div className="dtc-num dtc-dim">—</div>
         <div className="dtc-num dtc-accent">

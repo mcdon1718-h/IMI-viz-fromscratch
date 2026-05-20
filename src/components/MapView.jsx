@@ -9,6 +9,7 @@ import {
   useMap,
   useMapEvents,
 } from 'react-leaflet';
+import L                from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import parseGeoraster        from 'georaster';
 import GeoRasterLayer        from 'georaster-layer-for-leaflet';
@@ -61,18 +62,22 @@ function buildPixelColorFn(domainMin, domainMax, stops) {
   const range = (domainMax - domainMin) || 1;
   return (values) => {
     let v = values[0];
-
-    // Treat missing / NaN pixels as zero so they receive the zero-color
     if (v == null || Number.isNaN(v)) v = 0;
-
     const t = (v - domainMin) / range;
     return stopsToColor(t, stops);
   };
 }
 
-// ─── Grid value lookup ────────────────────────────────────────────────────────
-// Converts a lat/lng to the pixel row/col in the georaster and returns
-// the raw band-0 value, or null if outside bounds / nodata / zero.
+// ─── Feature name helper ──────────────────────────────────────────────────────
+// Handles US state GeoJSON (name / NAME / NAME_1) and Colombia province GeoJSON
+// (PROVINCE / province) with a single priority-ordered lookup.
+
+function getFeatureName(feature) {
+  const p = feature?.properties ?? {};
+  return p.name ?? p.NAME ?? p.NAME_1 ?? p.PROVINCE ?? p.province ?? '';
+}
+
+// ─── Grid value lookup (TIF) ──────────────────────────────────────────────────
 
 function getValueAtLatLng(gr, lat, lng) {
   if (!gr?.values) return null;
@@ -82,29 +87,94 @@ function getValueAtLatLng(gr, lat, lng) {
     values, noDataValue,
     width, height,
   } = gr;
-
   if (lng < xmin || lng > xmax || lat < ymin || lat > ymax) return null;
-
   const col = Math.floor((lng - xmin) / pixelWidth);
   const row = Math.floor((ymax - lat) / pixelHeight);
-
   if (row < 0 || row >= height || col < 0 || col >= width) return null;
-
   const val = values[0]?.[row]?.[col];
-  if (val == null)                                       return null;
-  if (noDataValue != null && val === noDataValue)        return null;
-  if (!Number.isFinite(val) || val <= 0)                 return null;
-
+  if (val == null)                                   return null;
+  if (noDataValue != null && val === noDataValue)    return null;
+  if (!Number.isFinite(val) || val <= 0)             return null;
   return val;
 }
 
-// ─── GridHoverLayer ───────────────────────────────────────────────────────────
-// Lives inside <MapContainer>. Listens to Leaflet mousemove, looks up the
-// pixel value, and portals a tooltip div into the map container element.
+// ─── Grid value lookup (JSON / Colombia) ──────────────────────────────────────
+// Nearest-neighbour search into the flat values array using the lat/lon metadata.
+
+function getValueAtLatLngFromGrid(gridMeta, values, lat, lng) {
+  if (!gridMeta?.lats?.length || !gridMeta?.lons?.length || !values?.length) return null;
+
+  const { lats, lons } = gridMeta;
+  const nlat = lats.length;
+  const nlon = lons.length;
+  const dlat = nlat > 1 ? Math.abs(Number(lats[1]) - Number(lats[0])) : 0.25;
+  const dlon = nlon > 1 ? Math.abs(Number(lons[1]) - Number(lons[0])) : 0.25;
+
+  // Find nearest lat row
+  let latIdx = 0, minLatD = Infinity;
+  for (let i = 0; i < nlat; i++) {
+    const d = Math.abs(Number(lats[i]) - lat);
+    if (d < minLatD) { minLatD = d; latIdx = i; }
+  }
+  if (minLatD > dlat / 2) return null;   // cursor outside grid
+
+  // Find nearest lon column
+  let lonIdx = 0, minLonD = Infinity;
+  for (let j = 0; j < nlon; j++) {
+    const d = Math.abs(Number(lons[j]) - lng);
+    if (d < minLonD) { minLonD = d; lonIdx = j; }
+  }
+  if (minLonD > dlon / 2) return null;   // cursor outside grid
+
+  const v = values[latIdx * nlon + lonIdx];
+  if (v == null || !Number.isFinite(v) || v <= 0) return null;
+  return v;
+}
+
+// ─── MapController ────────────────────────────────────────────────────────────
+// React-Leaflet's MapContainer treats center / zoom / maxBounds as initial-only.
+// This child component keeps the Leaflet instance in sync when the active dataset
+// (and therefore mapConfig) changes.
+
+function MapController({ mapConfig }) {
+  const map = useMap();
+  const { initialViewState, maxBounds, minZoom, maxZoom } = mapConfig;
+
+  // Stable serialised key — bounds effect only re-fires when limits actually change
+  const boundsKey = JSON.stringify({ maxBounds: maxBounds ?? null, minZoom, maxZoom });
+
+  // Re-centre / re-zoom on dataset switch
+  useEffect(() => {
+    map.setView(
+      [initialViewState.latitude, initialViewState.longitude],
+      initialViewState.zoom,
+      { animate: true, duration: 0.5 },
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, initialViewState.latitude, initialViewState.longitude, initialViewState.zoom]);
+
+  // Sync pan bounds and zoom limits
+  useEffect(() => {
+    if (maxBounds) {
+      map.setMaxBounds(maxBounds);
+      map.options.maxBoundsViscosity = 1.0;
+    } else {
+      map.setMaxBounds(null);
+      map.options.maxBoundsViscosity = 0;
+    }
+    if (minZoom != null) map.setMinZoom(minZoom);
+    if (maxZoom != null) map.setMaxZoom(maxZoom);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, boundsKey]);
+
+  return null;
+}
+
+// ─── GridHoverLayer (TIF mode) ────────────────────────────────────────────────
 
 function GridHoverLayer({ georaster, units }) {
   const map = useMap();
-  const [hover, setHover] = useState(null); // { point: {x,y}, value } | null
+  const [hover, setHover] = useState(null);
 
   useMapEvents({
     mousemove(e) {
@@ -118,7 +188,6 @@ function GridHoverLayer({ georaster, units }) {
 
   if (!hover) return null;
 
-  // .leaflet-container has position:relative, so containerPoint coords work
   return createPortal(
     <div
       className="grid-hover-tooltip"
@@ -131,70 +200,74 @@ function GridHoverLayer({ georaster, units }) {
   );
 }
 
-// ─── RasterLayer ─────────────────────────────────────────────────────────────
+// ─── JsonGridHoverLayer ───────────────────────────────────────────────────────
+// Same portal tooltip as GridHoverLayer but uses the flat JSON values array
+// instead of a parsed georaster (the polygon layer is non-interactive).
+
+function JsonGridHoverLayer({ gridMeta, values, units }) {
+  const map = useMap();
+  const [hover, setHover] = useState(null);
+
+  useMapEvents({
+    mousemove(e) {
+      if (!gridMeta || !values) { setHover(null); return; }
+      const val = getValueAtLatLngFromGrid(gridMeta, values, e.latlng.lat, e.latlng.lng);
+      setHover(val != null ? { point: e.containerPoint, value: val } : null);
+    },
+    mouseout()  { setHover(null); },
+    dragstart() { setHover(null); },
+  });
+
+  if (!hover) return null;
+
+  return createPortal(
+    <div
+      className="grid-hover-tooltip"
+      style={{ left: hover.point.x + 14, top: hover.point.y }}
+    >
+      {hover.value.toFixed(3)}
+      {units && <span className="grid-hover-units"> {units}</span>}
+    </div>,
+    map.getContainer(),
+  );
+}
+
+// ─── RasterLayer (TIF / CONUS) ────────────────────────────────────────────────
 
 function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity, onGeoRasterReady }) {
   const map = useMap();
-
   const [georaster, setGeoraster] = useState(null);
   const layerRef = useRef(null);
-
   const displayRef = useRef({ domainMin, domainMax, colorStops, opacity });
   displayRef.current = { domainMin, domainMax, colorStops, opacity };
 
-  // ── Effect 1: fetch + parse TIF ──────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
-
     fetch(tifUrl)
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status} — ${tifUrl}`);
-        return r.arrayBuffer();
-      })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status} — ${tifUrl}`); return r.arrayBuffer(); })
       .then(buf  => parseGeoraster(buf))
-      .then(gr   => {
-        if (!cancelled) {
-          setGeoraster(gr);
-          onGeoRasterReady?.(gr);   // ← hand the parsed raster up to MapView
-        }
-      })
-      .catch(err => {
-        if (!cancelled) console.error('[RasterLayer] load error:', err.message);
-      });
-
-    return () => {
-      cancelled = true;
-      onGeoRasterReady?.(null);     // ← clear on unmount / url change
-    };
+      .then(gr   => { if (!cancelled) { setGeoraster(gr); onGeoRasterReady?.(gr); } })
+      .catch(err => { if (!cancelled) console.error('[RasterLayer] load error:', err.message); });
+    return () => { cancelled = true; onGeoRasterReady?.(null); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tifUrl]);
 
-  // ── Effect 2: create Leaflet layer once georaster is in state ─────────────
   useEffect(() => {
     if (!georaster) return undefined;
+    const { domainMin: dMin, domainMax: dMax, colorStops: cs, opacity: op } = displayRef.current;
 
-    const { domainMin: dMin, domainMax: dMax, colorStops: cs, opacity: op } =
-      displayRef.current;
-
-    const RASTER_PANE = 'rasterPane';
+    const PANE = 'rasterPane';
     try {
-      if (!map.getPane(RASTER_PANE)) {
-        map.createPane(RASTER_PANE);
-        const p = map.getPane(RASTER_PANE);
-        if (p && p.style) {
-          p.style.zIndex = 650;
-          p.style.pointerEvents = 'none';
-        }
+      if (!map.getPane(PANE)) {
+        map.createPane(PANE);
+        const p = map.getPane(PANE);
+        if (p?.style) { p.style.zIndex = 650; p.style.pointerEvents = 'none'; }
       }
-    } catch (e) { /* ignore */ }
+    } catch (_) {}
 
     if (layerRef.current) {
-      try {
-        map.removeLayer(layerRef.current);
-      } catch (e) {
-        if (typeof layerRef.current.remove === 'function') {
-          try { layerRef.current.remove(); } catch (_) { /* ignore */ }
-        }
+      try { map.removeLayer(layerRef.current); } catch (_) {
+        try { layerRef.current.remove(); } catch (__) {}
       }
       layerRef.current = null;
     }
@@ -202,71 +275,52 @@ function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity, onGeoR
     try {
       map.eachLayer((l) => {
         if (!l || l === layerRef.current) return;
-        const isGeoRaster   = !!l.__isGeoRaster;
-        const hasPixelFn    = !!(l.options && l.options.pixelValuesToColorFn);
-        const inRasterPane  = l.options && l.options.pane === 'rasterPane';
-        const hasBaseUrl    = !!(l.options && (l.options.url || l._url));
-        if ((isGeoRaster || hasPixelFn || inRasterPane) && !hasBaseUrl) {
-          try { map.removeLayer(l); } catch (_) { }
+        if ((!!l.__isGeoRaster || !!(l.options?.pixelValuesToColorFn) || l.options?.pane === PANE)
+            && !(l.options?.url || l._url)) {
+          try { map.removeLayer(l); } catch (_) {}
         }
       });
-    } catch (e) { /* ignore */ }
+    } catch (_) {}
 
     const layer = new GeoRasterLayer({
       georaster,
       opacity:              op,
       pixelValuesToColorFn: buildPixelColorFn(dMin, dMax, cs),
       resolution:           256,
-      pane:                 RASTER_PANE,
+      pane:                 PANE,
       caching:              false,
     });
-
-    try { layer.__isGeoRaster = true; } catch (e) { /* ignore */ }
+    try { layer.__isGeoRaster = true; } catch (_) {}
     layer.addTo(map);
     layerRef.current = layer;
 
     return () => {
-      try {
-        if (map && layer) map.removeLayer(layer);
-      } catch (e) {
-        if (typeof layer?.remove === 'function') {
-          try { layer.remove(); } catch (_) { /* ignore */ }
-        }
+      try { if (map && layer) map.removeLayer(layer); } catch (_) {
+        try { layer?.remove(); } catch (__) {}
       }
-
       try {
-        const pane = map.getPane && map.getPane('rasterPane');
-        if (pane) {
-          while (pane.firstChild) pane.removeChild(pane.firstChild);
-        }
-      } catch (e) { /* ignore */ }
-
+        const pane = map.getPane?.('rasterPane');
+        if (pane) while (pane.firstChild) pane.removeChild(pane.firstChild);
+      } catch (_) {}
       try {
         map.eachLayer((l) => {
           if (!l) return;
-          const hasBaseUrl   = !!(l.options && (l.options.url || l._url));
-          const isFlagged    = !!l.__isGeoRaster;
-          const inRasterPane = l.options && l.options.pane === 'rasterPane';
-          const hasPixelFn   = !!(l.options && l.options.pixelValuesToColorFn);
-          if ((isFlagged || inRasterPane || hasPixelFn) && !hasBaseUrl) {
-            try { map.removeLayer(l); } catch (_) { }
+          if ((!!l.__isGeoRaster || l.options?.pane === PANE || !!(l.options?.pixelValuesToColorFn))
+              && !(l.options?.url || l._url)) {
+            try { map.removeLayer(l); } catch (_) {}
           }
         });
-      } catch (e) { /* ignore */ }
-
+      } catch (_) {}
       if (layerRef.current === layer) layerRef.current = null;
     };
   }, [georaster, map]);
 
-  // ── Effect 3: re-color when domain changes ────────────────────────────────
   useEffect(() => {
     if (!layerRef.current) return;
-    layerRef.current.options.pixelValuesToColorFn =
-      buildPixelColorFn(domainMin, domainMax, colorStops);
+    layerRef.current.options.pixelValuesToColorFn = buildPixelColorFn(domainMin, domainMax, colorStops);
     layerRef.current.redraw();
   }, [domainMin, domainMax, colorStops]);
 
-  // ── Effect 4: update opacity in-place ────────────────────────────────────
   useEffect(() => {
     if (!layerRef.current) return;
     layerRef.current.setOpacity(opacity);
@@ -275,79 +329,174 @@ function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity, onGeoR
   return null;
 }
 
+// ─── JsonGridLayer (Colombia) ─────────────────────────────────────────────────
+
+function JsonGridLayer({ gridMeta, filePath, domainMax, colorStops, opacity, onRawMaxReady, onValuesReady }) {
+  const map = useMap();
+  const layerRef = useRef(null);
+  const styleRef = useRef({ domainMax, colorStops, opacity });
+  styleRef.current = { domainMax, colorStops, opacity };
+
+  // Effect 1: fetch grid JSON and rebuild the polygon layer
+  useEffect(() => {
+    if (!filePath || !gridMeta?.lats?.length || !gridMeta?.lons?.length) {
+      onRawMaxReady?.(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    fetch(filePath)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status} — ${filePath}`);
+        return r.json();
+      })
+      .then(data => {
+        if (cancelled) return;
+
+        const rawVals = Array.isArray(data.values) ? data.values : [];
+        const { lats, lons } = gridMeta;
+        const nlat = lats.length;
+        const nlon = lons.length;
+        const dlat = nlat > 1 ? Math.abs(Number(lats[1]) - Number(lats[0])) : 0.25;
+        const dlon = nlon > 1 ? Math.abs(Number(lons[1]) - Number(lons[0])) : 0.25;
+
+        const features = [];
+        let rawMax = 0;
+
+        for (let i = 0; i < nlat; i++) {
+          for (let j = 0; j < nlon; j++) {
+            const raw = rawVals[i * nlon + j];
+
+            // null / undefined means this cell is absent from the dataset — skip it
+            if (raw == null) continue;
+
+            // NaN / Infinity → treat as zero so the cell renders with the first
+            // colour stop rather than leaving a transparent gap in the grid
+            const v = (Number.isFinite(raw) && raw > 0) ? raw : 0;
+            if (v > rawMax) rawMax = v;
+
+            const lat = Number(lats[i]);
+            const lon = Number(lons[j]);
+            features.push({
+              type: 'Feature',
+              properties: { value: v },
+              geometry: {
+                type: 'Polygon',
+                coordinates: [[
+                  [lon - dlon / 2, lat - dlat / 2],
+                  [lon + dlon / 2, lat - dlat / 2],
+                  [lon + dlon / 2, lat + dlat / 2],
+                  [lon - dlon / 2, lat + dlat / 2],
+                  [lon - dlon / 2, lat - dlat / 2],
+                ]],
+              },
+            });
+          }
+        }
+
+        if (cancelled) return;
+
+        if (layerRef.current) {
+          try { map.removeLayer(layerRef.current); } catch (_) {}
+          layerRef.current = null;
+        }
+
+        if (!features.length) { onRawMaxReady?.(null); return; }
+
+        try {
+          if (!map.getPane('jsonGridPane')) {
+            map.createPane('jsonGridPane');
+            const p = map.getPane('jsonGridPane');
+            if (p) { p.style.zIndex = '645'; p.style.pointerEvents = 'none'; }
+          }
+        } catch (_) {}
+
+        const layer = L.geoJSON(
+          { type: 'FeatureCollection', features },
+          {
+            pane:        'jsonGridPane',
+            interactive: false,
+            style: (feature) => {
+              const { domainMax: dm, colorStops: cs, opacity: op } = styleRef.current;
+              const t = Math.max(0, Math.min(1, feature.properties.value / (dm || 1)));
+              return { color: 'transparent', weight: 0, fillColor: stopsToColor(t, cs), fillOpacity: op };
+            },
+          },
+        );
+
+        layer.addTo(map);
+        layerRef.current = layer;
+        onRawMaxReady?.(rawMax > 0 ? rawMax : null);
+        onValuesReady?.(rawVals);
+      })
+      .catch(err => {
+        if (!cancelled) console.error('[JsonGridLayer]', err.message);
+      });
+
+    return () => {
+      cancelled = true;
+      if (layerRef.current) {
+        try { map.removeLayer(layerRef.current); } catch (_) {}
+        layerRef.current = null;
+      }
+      onRawMaxReady?.(null);
+      onValuesReady?.(null);    
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filePath, gridMeta, map]);
+
+  // Effect 2: restyle in-place when domain or opacity changes (no rebuild)
+  useEffect(() => {
+    if (!layerRef.current) return;
+    layerRef.current.setStyle((feature) => {
+      const t = Math.max(0, Math.min(1, feature.properties.value / (domainMax || 1)));
+      return { color: 'transparent', weight: 0, fillColor: stopsToColor(t, colorStops), fillOpacity: opacity };
+    });
+  }, [domainMax, colorStops, opacity]);
+
+  return null;
+}
+
 // ─── ChoroplethLayer ──────────────────────────────────────────────────────────
 
-function ChoroplethLayer({
-  geojson,
-  stateDataMap,
-  colKey,
-  domain,
-  colorStops,
-  onStateClick,
-}) {
+function ChoroplethLayer({ geojson, stateDataMap, colKey, domain, colorStops, onStateClick }) {
   const styleFn = useCallback(
     (feature) => {
-      const name =
-        feature.properties?.name   ??
-        feature.properties?.NAME   ??
-        feature.properties?.NAME_1 ?? '';
-      const row = stateDataMap?.[name];
-      const val = row ? parseNumber(row[colKey]) : null;
+      const name = getFeatureName(feature);
+      const row  = stateDataMap?.[name];
+      const val  = row ? parseNumber(row[colKey]) : null;
 
       if (val == null || !Number.isFinite(val)) {
         return { fillColor: '#2a2a3a', fillOpacity: 0.5, color: '#444', weight: 0.6 };
       }
       const t = (val - domain.min) / ((domain.max - domain.min) || 1);
-      return {
-        fillColor:   stopsToColor(t, colorStops),
-        fillOpacity: 0.8,
-        color:       '#1a1a2e',
-        weight:      0.6,
-      };
+      return { fillColor: stopsToColor(t, colorStops), fillOpacity: 0.8, color: '#1a1a2e', weight: 0.6 };
     },
     [stateDataMap, colKey, domain, colorStops],
   );
 
   const onEachFeature = useCallback(
     (feature, layer) => {
-      const name =
-        feature.properties?.name   ??
-        feature.properties?.NAME   ??
-        feature.properties?.NAME_1 ?? '';
-      const row = stateDataMap?.[name];
-      const val = row ? parseNumber(row[colKey]) : null;
+      const name = getFeatureName(feature);
+      const row  = stateDataMap?.[name];
+      const val  = row ? parseNumber(row[colKey]) : null;
 
       layer.bindTooltip(
         `<strong>${name}</strong><br />${val != null ? val.toFixed(3) : 'N/A'}`,
         { sticky: true },
       );
-
       layer.on({
-        click(e) {
-          e.originalEvent?.stopPropagation?.();
-          onStateClick(name);
-        },
-        mouseover(e) {
-          e.target.setStyle({ weight: 2.5, color: '#fff', fillOpacity: 0.95 });
-          e.target.bringToFront();
-        },
-        mouseout(e) {
-          e.target.setStyle({ weight: 0.6, color: '#1a1a2e', fillOpacity: 0.8 });
-        },
+        click(e)     { e.originalEvent?.stopPropagation?.(); onStateClick(name); },
+        mouseover(e) { e.target.setStyle({ weight: 2.5, color: '#fff', fillOpacity: 0.95 }); e.target.bringToFront(); },
+        mouseout(e)  { e.target.setStyle({ weight: 0.6, color: '#1a1a2e', fillOpacity: 0.8 }); },
       });
     },
     [onStateClick, stateDataMap, colKey],
   );
 
   if (!geojson) return null;
-
-  return (
-    <GeoJSON
-      data={geojson}
-      style={styleFn}
-      onEachFeature={onEachFeature}
-    />
-  );
+  return <GeoJSON data={geojson} style={styleFn} onEachFeature={onEachFeature} />;
 }
 
 // ─── StateBorderLayer ─────────────────────────────────────────────────────────
@@ -355,10 +504,7 @@ function ChoroplethLayer({
 function StateBorderLayer({ geojson, selectedState, onStateClick }) {
   const styleFn = useCallback(
     (feature) => {
-      const name =
-        feature.properties?.name   ??
-        feature.properties?.NAME   ??
-        feature.properties?.NAME_1 ?? '';
+      const name = getFeatureName(feature);
       return {
         fillColor:   'transparent',
         fillOpacity: 0,
@@ -371,25 +517,17 @@ function StateBorderLayer({ geojson, selectedState, onStateClick }) {
 
   const onEachFeature = useCallback(
     (feature, layer) => {
-      const name =
-        feature.properties?.name   ??
-        feature.properties?.NAME   ??
-        feature.properties?.NAME_1 ?? '';
+      const name = getFeatureName(feature);
       layer.on({
-        click(e) {
-          e.originalEvent?.stopPropagation?.();
-          onStateClick(name);
-        },
+        click(e) { e.originalEvent?.stopPropagation?.(); onStateClick(name); },
       });
     },
     [onStateClick],
   );
 
   if (!geojson) return null;
-
   return (
     <GeoJSON
-      key={`borders-${selectedState}`}
       data={geojson}
       style={styleFn}
       onEachFeature={onEachFeature}
@@ -405,47 +543,56 @@ export function MapView() {
     controls,
     selectedState,
     setSelectedState,
+    jsonGridDomain,
+    setJsonGridDomain,
   } = useDatasetContext();
 
   const { data: baseData, loading, error } = useEmissionData();
 
   const { mapConfig, display, dataRoot } = activeDataset;
   const colorStops = display.colorScale?.stops ?? [];
-
   const isGridMode = controls.viewMode === 'grid';
 
-  // ── Parsed georaster from the active TIF, forwarded by RasterLayer ────────
   const [activeGeoRaster, setActiveGeoRaster] = useState(null);
+  const [activeJsonGridValues, setActiveJsonGridValues] = useState(null);
 
-  // ── TIF URL ───────────────────────────────────────────────────────────────
+  // Clear the JSON grid domain when any grid-affecting control changes
+  useEffect(() => {
+    setJsonGridDomain(null);
+  }, [activeDataset.id, controls.sector, controls.year, setJsonGridDomain]);
+
+  // ── TIF URL (CONUS grid mode) ─────────────────────────────────────────────
   const tifUrl = useMemo(() => {
     if (!baseData?.manifest || !isGridMode) return null;
     const entry = getManifestEntry(
-      baseData.manifest,
-      controls.sector,
-      controls.year,
-      controls.satellite,
+      baseData.manifest, controls.sector, controls.year, controls.satellite,
     );
     return entry?.tif ? resolveTifUrl(dataRoot ?? '', entry.tif) : null;
   }, [
-    baseData?.manifest,
-    controls.viewMode,
-    controls.sector,
-    controls.year,
-    controls.satellite,
-    dataRoot,
+    baseData?.manifest, controls.viewMode, controls.sector,
+    controls.year, controls.satellite, dataRoot,
   ]);
 
-  // ── Raster domain ─────────────────────────────────────────────────────────
+  // ── JSON grid file path (Colombia grid mode) ──────────────────────────────
+  const jsonGridFilePath = useMemo(() => {
+    if (!isGridMode || activeDataset.gridType !== 'json') return null;
+    return baseData?.gridFiles?.[controls.year]?.[controls.sector] ?? null;
+  }, [isGridMode, activeDataset.gridType, baseData, controls.year, controls.sector]);
+
+  // ── Raster/grid domain ────────────────────────────────────────────────────
   const rasterDomain = useMemo(() => {
-    if (!baseData?.manifest || !isGridMode) return { min: 0, max: 1 };
-    const g = getGlobalDomain(baseData.manifest, controls.sector);
-    return { min: 0, max: g.max * (controls.maxEmission ?? 1.0) };
+    if (!isGridMode) return { min: 0, max: 1 };
+    if (baseData?.manifest) {
+      const g = getGlobalDomain(baseData.manifest, controls.sector);
+      return { min: 0, max: g.max * (controls.maxEmission ?? 1.0) };
+    }
+    if (jsonGridDomain != null) {
+      return { min: 0, max: jsonGridDomain.max * (controls.maxEmission ?? 1.0) };
+    }
+    return { min: 0, max: 1 };
   }, [
-    baseData?.manifest,
-    controls.viewMode,
-    controls.sector,
-    controls.maxEmission,
+    controls.viewMode, baseData?.manifest, controls.sector,
+    controls.maxEmission, jsonGridDomain,
   ]);
 
   // ── Choropleth domain ─────────────────────────────────────────────────────
@@ -456,25 +603,24 @@ export function MapView() {
     );
   }, [baseData, controls.viewMode, controls.year, controls.satellite, controls.sector]);
 
-  // ── Column key for choropleth state lookup ────────────────────────────────
+  // ── Column key for choropleth lookup ──────────────────────────────────────
   const colKey = useMemo(
     () => centralCol(controls.sector, 'state', controls.satellite),
     [controls.sector, controls.satellite],
   );
 
-  // ── State-level data for the selected year ────────────────────────────────
+  // ── State/province data for the selected year ─────────────────────────────
   const stateDataMap = useMemo(
     () => baseData?.byYear?.[controls.year] ?? {},
     [baseData, controls.year],
   );
 
-  // ── State click handler ───────────────────────────────────────────────────
   const handleStateClick = useCallback(
     (name) => setSelectedState(selectedState === name ? null : name),
     [selectedState, setSelectedState],
   );
 
-  const { initialViewState, maxBounds, minZoom = 2, maxZoom = 12 } = mapConfig;
+  const { initialViewState, minZoom = 2, maxZoom = 12 } = mapConfig;
 
   return (
     <div className="map-wrapper">
@@ -486,18 +632,23 @@ export function MapView() {
         <div className="map-overlay error">Error: {error}</div>
       )}
       {!loading && !error && !selectedState && (
-        <div className="map-overlay hint">Click a state to view state-level data</div>
+        <div className="map-overlay hint">Click a region to view regional data</div>
       )}
 
+      {/*
+        maxBounds / maxBoundsViscosity are intentionally omitted here —
+        MapContainer only reads them once. MapController keeps them current.
+      */}
       <MapContainer
         className="map-container"
         center={[initialViewState.latitude, initialViewState.longitude]}
         zoom={initialViewState.zoom}
         minZoom={minZoom}
         maxZoom={maxZoom}
-        maxBounds={maxBounds ?? undefined}
-        maxBoundsViscosity={maxBounds ? 1.0 : 0}
       >
+        {/* Keeps view, bounds and zoom limits in sync after dataset switches */}
+        <MapController mapConfig={mapConfig} />
+
         <TileLayer
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -505,18 +656,18 @@ export function MapView() {
           maxZoom={19}
         />
 
-        {/* ── Grid hover tooltip — only mounted in grid mode ───────────── */}
-        {isGridMode && (
+        {/* Grid hover tooltip — TIF mode only */}
+        {isGridMode && !activeDataset.gridType && (
           <GridHoverLayer
             georaster={activeGeoRaster}
             units={display.legendUnits ?? display.units}
           />
         )}
 
-        {/* ── Choropleth mode ──────────────────────────────────────────── */}
+        {/* Choropleth — keyed by dataset so GeoJSON remounts on dataset switch */}
         {!isGridMode && baseData?.statesGeoJSON && (
           <ChoroplethLayer
-            key={`ch-${controls.year}-${controls.satellite}-${colKey}`}
+            key={`ch-${activeDataset.id}-${controls.year}-${controls.satellite}-${colKey}`}
             geojson={baseData.statesGeoJSON}
             stateDataMap={stateDataMap}
             colKey={colKey}
@@ -526,8 +677,8 @@ export function MapView() {
           />
         )}
 
-        {/* ── Grid mode — raster TIF ───────────────────────────────────── */}
-        {isGridMode && tifUrl && (
+        {/* TIF raster (CONUS) */}
+        {isGridMode && !activeDataset.gridType && tifUrl && (
           <RasterLayer
             key={tifUrl}
             tifUrl={tifUrl}
@@ -539,9 +690,35 @@ export function MapView() {
           />
         )}
 
-        {/* ── State borders (grid mode) — click-to-select ──────────────── */}
+        {/* JSON polygon grid (Colombia) */}
+        {isGridMode && activeDataset.gridType === 'json' && jsonGridFilePath && (
+          <JsonGridLayer
+            key={jsonGridFilePath}
+            gridMeta={baseData.gridMeta}
+            filePath={jsonGridFilePath}
+            domainMax={rasterDomain.max}
+            colorStops={colorStops}
+            opacity={controls.opacity ?? 0.65}
+            onRawMaxReady={(max) =>
+              setJsonGridDomain(max != null ? { min: 0, max } : null)
+            }
+            onValuesReady={setActiveJsonGridValues}
+          />
+        )}
+
+        {/* JSON grid hover tooltip (Colombia) */}
+        {isGridMode && activeDataset.gridType === 'json' && (
+          <JsonGridHoverLayer
+            gridMeta={baseData?.gridMeta}
+            values={activeJsonGridValues}
+            units={display.legendUnits ?? display.units}
+          />
+        )}
+
+        {/* Region borders (grid mode) — keyed by dataset + selection */}
         {isGridMode && baseData?.statesGeoJSON && (
           <StateBorderLayer
+            key={`borders-${activeDataset.id}-${selectedState}`}
             geojson={baseData.statesGeoJSON}
             selectedState={selectedState}
             onStateClick={handleStateClick}

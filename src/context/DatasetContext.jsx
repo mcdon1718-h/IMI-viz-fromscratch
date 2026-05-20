@@ -43,7 +43,6 @@ function reducer(state, action) {
     case 'SET_CONTROL': {
       const newControls = { ...state.controls, [action.key]: action.value };
 
-      // If satellite changed, snap year to nearest valid option
       if (action.key === 'satellite') {
         const dataset     = getDataset(state.activeDatasetId);
         const yearControl = dataset.controls.find(c => c.key === 'year');
@@ -85,16 +84,28 @@ export function DatasetProvider({ initialFamilyId, initialDatasetId, children })
     lastDatasetByFamily: { [resolvedFamilyId]: resolvedDatasetId },
   });
 
-  // ── Selected state (for map click → chart interaction) ──────────────────────
+  // ── Selected region (map click → chart interaction) ──────────────────────
   const [selectedState, setSelectedStateRaw] = useState(null);
 
-  // Reset selected state when dataset or mode changes
+  // ── JSON grid domain (reported by JsonGridLayer, consumed by Legend) ──────
+  const [jsonGridDomain, setJsonGridDomain] = useState(null);
+
   const setSelectedState = useCallback((stateName) => {
     setSelectedStateRaw(stateName);
   }, []);
 
-  const setActiveFamily  = useCallback((id) => { dispatch({ type: 'SET_FAMILY',  id }); setSelectedStateRaw(null); }, []);
-  const setActiveDataset = useCallback((id) => { dispatch({ type: 'SET_DATASET', id }); setSelectedStateRaw(null); }, []);
+  const setActiveFamily = useCallback((id) => {
+    dispatch({ type: 'SET_FAMILY', id });
+    setSelectedStateRaw(null);
+    setJsonGridDomain(null);
+  }, []);
+
+  const setActiveDataset = useCallback((id) => {
+    dispatch({ type: 'SET_DATASET', id });
+    setSelectedStateRaw(null);
+    setJsonGridDomain(null);
+  }, []);
+
   const setControl = useCallback((key, value) => {
     dispatch({ type: 'SET_CONTROL', key, value });
     if (key === 'mode') setSelectedStateRaw(null);
@@ -110,10 +121,14 @@ export function DatasetProvider({ initialFamilyId, initialDatasetId, children })
     setActiveDataset,
     controls:       state.controls,
     setControl,
-    // ── NEW ──
     selectedState,
     setSelectedState,
-  }), [state, allFamilies, selectedState, setActiveFamily, setActiveDataset, setControl, setSelectedState]);
+    jsonGridDomain,
+    setJsonGridDomain,
+  }), [
+    state, allFamilies, selectedState, jsonGridDomain,
+    setActiveFamily, setActiveDataset, setControl, setSelectedState,
+  ]);
 
   return (
     <DatasetContext.Provider value={value}>

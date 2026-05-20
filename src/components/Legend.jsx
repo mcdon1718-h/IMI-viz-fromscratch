@@ -9,27 +9,35 @@ const GRADIENT = `linear-gradient(to right,
   #fd8d3c, #fc4e2a, #e31a1c, #bd0026, #800026)`;
 
 export function Legend() {
-  const { activeDataset, controls } = useDatasetContext();  // ← removed selectedState
-  const { data: baseData }          = useEmissionData();
-  const { display }                 = activeDataset;
+  const { activeDataset, controls, jsonGridDomain } = useDatasetContext();
+  const { data: baseData }                          = useEmissionData();
+  const { display }                                 = activeDataset;
 
-  // ── Derive mode from control, not from selectedState ─────────────────────
   const isGrid       = controls.viewMode === 'grid';
   const isChoropleth = !isGrid;
 
   const rasterDomain = useMemo(() => {
-    if (!isGrid || !baseData?.manifest) return null;
+  if (!isGrid) return null;
+
+  // CONUS — manifest carries a pre-computed global max per sector/year
+  if (baseData?.manifest) {
     const global = getGlobalDomain(baseData.manifest, controls.sector);
-    return {
-      min: global.min,
-      max: global.max * (controls.maxEmission ?? 1.0),
-    };
-  }, [isGrid, baseData, controls.sector, controls.maxEmission]);
+    return { min: global.min, max: global.max * (controls.maxEmission ?? 1.0) };
+  }
+
+  // Colombia (JSON grid) — max is reported dynamically by JsonGridLayer
+  // after it finishes loading; shows '—' in the legend until that first load
+  if (jsonGridDomain != null) {
+    return { min: 0, max: jsonGridDomain.max * (controls.maxEmission ?? 1.0) };
+  }
+
+  return null;
+}, [isGrid, baseData, controls.sector, controls.maxEmission, jsonGridDomain]);
 
   const choroplethDomain = useMemo(() => {
     if (!isChoropleth || !baseData) return null;
     return computeChoroplethDomain(
-      baseData, controls.year, controls.satellite, controls.sector
+      baseData, controls.year, controls.satellite, controls.sector,
     );
   }, [isChoropleth, baseData, controls.year, controls.satellite, controls.sector]);
 

@@ -27,7 +27,7 @@ registerDataset({
       type:    'radio',
       options: [
         { value: 'grid',       label: 'Grid'       },
-        { value: 'choropleth', label: 'Choropleth' },
+        { value: 'choropleth', label: 'Shaded Map' },
       ],
       default: 'grid',
     },
