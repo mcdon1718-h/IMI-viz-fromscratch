@@ -3,6 +3,7 @@ import { useDatasetContext } from '../context/DatasetContext';
 import { FamilySelector }   from './FamilySelector';
 import { DatasetSelector }  from './DatasetSelector';
 import { ControlPanel }     from './ControlPanel';
+import { DataTotals }       from './DataTotals';
 import { MapView }          from './MapView';
 import { Legend }           from './Legend';
 import { SectorBarChart }   from './SectorBarChart';
@@ -39,6 +40,9 @@ export function Dashboard() {
             <h2>{activeDataset.name}</h2>
             <p>{activeDataset.description}</p>
           </div>
+
+          {/* ── Emissions totals summary ──────────────────────────────── */}
+          <DataTotals />
 
           <ControlPanel />
           <Legend />
