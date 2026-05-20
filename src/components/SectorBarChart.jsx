@@ -19,7 +19,7 @@ import {
 }                                  from '../utils/emissionsUtils';
 
 // ─── Shared colour tokens (mirror TimeSeriesPlot) ─────────────────────────────
-const DIM_COLOR    = '#64748b';
+const DIM_COLOR    = '#99a7b9';
 const BRIGHT_COLOR = '#e2e8f0';
 
 // ─── Custom tooltip ───────────────────────────────────────────────────────────
@@ -49,7 +49,7 @@ function SectorBarCustomTooltip({ active, payload, label, units, accent, showUnc
       border:       '1px solid #2d3148',
       borderRadius: '6px',
       padding:      '0.4rem 0.65rem',
-      fontSize:     '0.75rem',
+      fontSize:     '0.85rem',
       lineHeight:   1.65,
       minWidth:     '9rem',
     }}>

@@ -333,7 +333,7 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
 /* ── Grouped control row (Source | Sector | Year) ────────────────────────────── */
 .control-group-row {
   display:     grid;
-  gap:         0.4rem;
+  gap:         0.5rem;
   align-items: end;
 }
 

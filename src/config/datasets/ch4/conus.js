@@ -37,8 +37,8 @@ registerDataset({
       type:    'select',
       group:   'selects-row',
       options: [
-        { value: 'ghgi_tropomi', label: 'GHGI & TROPOMI' },
-        { value: 'ghgi',         label: 'GHGI'     },
+        { value: 'ghgi_tropomi', label: 'GHGI + TROPOMI' },
+        { value: 'ghgi',         label: 'GHGI Only'      },
       ],
       default: 'ghgi_tropomi',
     },
@@ -101,15 +101,23 @@ registerDataset({
   async dataLoader() {
     const ROOT = DATA_ROOT;
 
-    const [firstRows, nationalPostRows, nationalPriorRows, statesGeoJSON, manifest] =
-      await Promise.all([
-        fetchCSV(`${ROOT}/csv/estrada_states_${ALL_YEARS[0]}.csv`),
-        fetchCSV(`${ROOT}/csv/national_emissions.csv`),
-        fetchCSV(`${ROOT}/csv/national_prior_emissions_2017_2020.csv`),
-        fetch(`${ROOT}/ne/us_states_simplified.geojson`).then(r => r.json()),
-        fetch(`${ROOT}/manifest.json`).then(r => r.json()),
-      ]);
+    const [
+      firstRows,
+      nationalPostRows,
+      nationalPriorRows,
+      statePriorRows,
+      statesGeoJSON,
+      manifest,
+    ] = await Promise.all([
+      fetchCSV(`${ROOT}/csv/estrada_states_${ALL_YEARS[0]}.csv`),
+      fetchCSV(`${ROOT}/csv/national_emissions.csv`),
+      fetchCSV(`${ROOT}/csv/national_prior_emissions_2017_2020.csv`),
+      fetchCSV(`${ROOT}/csv/state_prior_emissions_2017_2020.csv`),
+      fetch(`${ROOT}/ne/us_states_simplified.geojson`).then(r => r.json()),
+      fetch(`${ROOT}/manifest.json`).then(r => r.json()),
+    ]);
 
+    // ── Posterior state data (all years) ──────────────────────────────────
     const byYear     = {};
     const sectorKeys = deriveSectors(firstRows[0] ?? {});
 
@@ -128,18 +136,40 @@ registerDataset({
       }
     }));
 
+    // ── National posterior ────────────────────────────────────────────────
     const nationalPosterior = {};
     for (const r of nationalPostRows) {
       const y = Number(r.Year);
       if (Number.isFinite(y)) nationalPosterior[y] = r;
     }
 
+    // ── National bottom-up prior ──────────────────────────────────────────
     const nationalPrior = {};
     for (const r of nationalPriorRows) {
       const y = Number(r.Year);
       if (Number.isFinite(y)) nationalPrior[y] = r;
     }
 
-    return { byYear, nationalPosterior, nationalPrior, sectorKeys, statesGeoJSON, manifest };
+    // ── State bottom-up prior: { [year]: { [stateName]: row } } ──────────
+    // Assumes same column shape as national_prior (bare sector keys) plus
+    // a State column and a Year column.
+    const stateByYearPrior = {};
+    for (const r of statePriorRows) {
+      const y    = Number(r.Year);
+      const name = r.State?.trim();
+      if (!Number.isFinite(y) || !name) continue;
+      if (!stateByYearPrior[y]) stateByYearPrior[y] = {};
+      stateByYearPrior[y][name] = r;
+    }
+
+    return {
+      byYear,
+      nationalPosterior,
+      nationalPrior,
+      stateByYearPrior,
+      sectorKeys,
+      statesGeoJSON,
+      manifest,
+    };
   },
 });
