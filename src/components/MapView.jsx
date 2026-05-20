@@ -1,11 +1,13 @@
 import React, {
   useEffect, useRef, useState, useMemo, useCallback,
 } from 'react';
+import { createPortal } from 'react-dom';
 import {
   MapContainer,
   TileLayer,
   GeoJSON,
   useMap,
+  useMapEvents,
 } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import parseGeoraster        from 'georaster';
@@ -58,33 +60,89 @@ function stopsToColor(t, stops) {
 function buildPixelColorFn(domainMin, domainMax, stops) {
   const range = (domainMax - domainMin) || 1;
   return (values) => {
-    const v = values[0];
-    if (v == null || v <= 0) return null;
+    let v = values[0];
+
+    // Treat missing / NaN pixels as zero so they receive the zero-color
+    if (v == null || Number.isNaN(v)) v = 0;
+
     const t = (v - domainMin) / range;
     return stopsToColor(t, stops);
   };
 }
 
-// ─── RasterLayer ─────────────────────────────────────────────────────────────
-// Rewritten: uses React state for georaster so async load → layer creation
-// is properly sequenced. key={tifUrl} on the render site ensures a fresh
-// component (and fresh state) for every distinct TIF file.
+// ─── Grid value lookup ────────────────────────────────────────────────────────
+// Converts a lat/lng to the pixel row/col in the georaster and returns
+// the raw band-0 value, or null if outside bounds / nodata / zero.
 
-function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity }) {
+function getValueAtLatLng(gr, lat, lng) {
+  if (!gr?.values) return null;
+  const {
+    xmin, xmax, ymin, ymax,
+    pixelWidth, pixelHeight,
+    values, noDataValue,
+    width, height,
+  } = gr;
+
+  if (lng < xmin || lng > xmax || lat < ymin || lat > ymax) return null;
+
+  const col = Math.floor((lng - xmin) / pixelWidth);
+  const row = Math.floor((ymax - lat) / pixelHeight);
+
+  if (row < 0 || row >= height || col < 0 || col >= width) return null;
+
+  const val = values[0]?.[row]?.[col];
+  if (val == null)                                       return null;
+  if (noDataValue != null && val === noDataValue)        return null;
+  if (!Number.isFinite(val) || val <= 0)                 return null;
+
+  return val;
+}
+
+// ─── GridHoverLayer ───────────────────────────────────────────────────────────
+// Lives inside <MapContainer>. Listens to Leaflet mousemove, looks up the
+// pixel value, and portals a tooltip div into the map container element.
+
+function GridHoverLayer({ georaster, units }) {
+  const map = useMap();
+  const [hover, setHover] = useState(null); // { point: {x,y}, value } | null
+
+  useMapEvents({
+    mousemove(e) {
+      if (!georaster) { setHover(null); return; }
+      const val = getValueAtLatLng(georaster, e.latlng.lat, e.latlng.lng);
+      setHover(val != null ? { point: e.containerPoint, value: val } : null);
+    },
+    mouseout()  { setHover(null); },
+    dragstart() { setHover(null); },
+  });
+
+  if (!hover) return null;
+
+  // .leaflet-container has position:relative, so containerPoint coords work
+  return createPortal(
+    <div
+      className="grid-hover-tooltip"
+      style={{ left: hover.point.x + 14, top: hover.point.y }}
+    >
+      {hover.value.toFixed(3)}
+      {units && <span className="grid-hover-units"> {units}</span>}
+    </div>,
+    map.getContainer(),
+  );
+}
+
+// ─── RasterLayer ─────────────────────────────────────────────────────────────
+
+function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity, onGeoRasterReady }) {
   const map = useMap();
 
-  // georaster lives in React state so Effect 2 fires only after load completes
   const [georaster, setGeoraster] = useState(null);
   const layerRef = useRef(null);
 
-  // Always-current display params, read by Effect 2 when it runs
   const displayRef = useRef({ domainMin, domainMax, colorStops, opacity });
   displayRef.current = { domainMin, domainMax, colorStops, opacity };
 
   // ── Effect 1: fetch + parse TIF ──────────────────────────────────────────
-  // Runs once per component instance (component is keyed by tifUrl, so each
-  // new URL mounts a fresh instance). Cancelled if component unmounts while
-  // the fetch is in-flight.
   useEffect(() => {
     let cancelled = false;
 
@@ -97,17 +155,21 @@ function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity }) {
       .then(gr   => {
         if (!cancelled) {
           setGeoraster(gr);
+          onGeoRasterReady?.(gr);   // ← hand the parsed raster up to MapView
         }
       })
       .catch(err => {
         if (!cancelled) console.error('[RasterLayer] load error:', err.message);
       });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      onGeoRasterReady?.(null);     // ← clear on unmount / url change
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tifUrl]);
 
   // ── Effect 2: create Leaflet layer once georaster is in state ─────────────
-  // Reads latest display params from ref so color/opacity are always current.
   useEffect(() => {
     if (!georaster) return undefined;
 
@@ -140,10 +202,10 @@ function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity }) {
     try {
       map.eachLayer((l) => {
         if (!l || l === layerRef.current) return;
-        const isGeoRaster = !!l.__isGeoRaster;
-        const hasPixelFn = !!(l.options && l.options.pixelValuesToColorFn);
-        const inRasterPane = l.options && l.options.pane === 'rasterPane';
-        const hasBaseUrl = !!(l.options && (l.options.url || l._url));
+        const isGeoRaster   = !!l.__isGeoRaster;
+        const hasPixelFn    = !!(l.options && l.options.pixelValuesToColorFn);
+        const inRasterPane  = l.options && l.options.pane === 'rasterPane';
+        const hasBaseUrl    = !!(l.options && (l.options.url || l._url));
         if ((isGeoRaster || hasPixelFn || inRasterPane) && !hasBaseUrl) {
           try { map.removeLayer(l); } catch (_) { }
         }
@@ -155,8 +217,8 @@ function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity }) {
       opacity:              op,
       pixelValuesToColorFn: buildPixelColorFn(dMin, dMax, cs),
       resolution:           256,
-      pane: RASTER_PANE,
-      caching: false,
+      pane:                 RASTER_PANE,
+      caching:              false,
     });
 
     try { layer.__isGeoRaster = true; } catch (e) { /* ignore */ }
@@ -182,10 +244,10 @@ function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity }) {
       try {
         map.eachLayer((l) => {
           if (!l) return;
-          const hasBaseUrl = !!(l.options && (l.options.url || l._url));
-          const isFlagged = !!l.__isGeoRaster;
+          const hasBaseUrl   = !!(l.options && (l.options.url || l._url));
+          const isFlagged    = !!l.__isGeoRaster;
           const inRasterPane = l.options && l.options.pane === 'rasterPane';
-          const hasPixelFn = !!(l.options && l.options.pixelValuesToColorFn);
+          const hasPixelFn   = !!(l.options && l.options.pixelValuesToColorFn);
           if ((isFlagged || inRasterPane || hasPixelFn) && !hasBaseUrl) {
             try { map.removeLayer(l); } catch (_) { }
           }
@@ -196,7 +258,7 @@ function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity }) {
     };
   }, [georaster, map]);
 
-  // ── Effect 3: re-color tiles when domain changes (no re-fetch needed) ────
+  // ── Effect 3: re-color when domain changes ────────────────────────────────
   useEffect(() => {
     if (!layerRef.current) return;
     layerRef.current.options.pixelValuesToColorFn =
@@ -348,12 +410,14 @@ export function MapView() {
   const { data: baseData, loading, error } = useEmissionData();
 
   const { mapConfig, display, dataRoot } = activeDataset;
-  const colorStops  = display.colorScale?.stops ?? [];
+  const colorStops = display.colorScale?.stops ?? [];
 
-  // ── Derive view mode from control (falls back to choropleth if undefined) ──
   const isGridMode = controls.viewMode === 'grid';
 
-  // ── TIF URL — recomputes whenever sector/year/satellite/viewMode changes ──
+  // ── Parsed georaster from the active TIF, forwarded by RasterLayer ────────
+  const [activeGeoRaster, setActiveGeoRaster] = useState(null);
+
+  // ── TIF URL ───────────────────────────────────────────────────────────────
   const tifUrl = useMemo(() => {
     if (!baseData?.manifest || !isGridMode) return null;
     const entry = getManifestEntry(
@@ -362,8 +426,7 @@ export function MapView() {
       controls.year,
       controls.satellite,
     );
-    const url = entry?.tif ? resolveTifUrl(dataRoot ?? '', entry.tif) : null;
-    return url;
+    return entry?.tif ? resolveTifUrl(dataRoot ?? '', entry.tif) : null;
   }, [
     baseData?.manifest,
     controls.viewMode,
@@ -373,7 +436,7 @@ export function MapView() {
     dataRoot,
   ]);
 
-  // ── Raster domain ────────────────────────────────────────────────────────
+  // ── Raster domain ─────────────────────────────────────────────────────────
   const rasterDomain = useMemo(() => {
     if (!baseData?.manifest || !isGridMode) return { min: 0, max: 1 };
     const g = getGlobalDomain(baseData.manifest, controls.sector);
@@ -385,7 +448,7 @@ export function MapView() {
     controls.maxEmission,
   ]);
 
-  // ── Choropleth domain ────────────────────────────────────────────────────
+  // ── Choropleth domain ─────────────────────────────────────────────────────
   const choroplethDomain = useMemo(() => {
     if (isGridMode || !baseData) return { min: 0, max: 10 };
     return computeChoroplethDomain(
@@ -393,19 +456,19 @@ export function MapView() {
     );
   }, [baseData, controls.viewMode, controls.year, controls.satellite, controls.sector]);
 
-  // ── Column key for choropleth state lookup ───────────────────────────────
+  // ── Column key for choropleth state lookup ────────────────────────────────
   const colKey = useMemo(
     () => centralCol(controls.sector, 'state', controls.satellite),
     [controls.sector, controls.satellite],
   );
 
-  // ── State-level data for the selected year ───────────────────────────────
+  // ── State-level data for the selected year ────────────────────────────────
   const stateDataMap = useMemo(
     () => baseData?.byYear?.[controls.year] ?? {},
     [baseData, controls.year],
   );
 
-  // ── State click: toggles selectedState for chart context only ────────────
+  // ── State click handler ───────────────────────────────────────────────────
   const handleStateClick = useCallback(
     (name) => setSelectedState(selectedState === name ? null : name),
     [selectedState, setSelectedState],
@@ -416,7 +479,6 @@ export function MapView() {
   return (
     <div className="map-wrapper">
 
-      {/* Status overlays */}
       {loading && (
         <div className="map-overlay loading">Loading data…</div>
       )}
@@ -443,7 +505,15 @@ export function MapView() {
           maxZoom={19}
         />
 
-        {/* ── Choropleth mode ──────────────────────────────────────────────── */}
+        {/* ── Grid hover tooltip — only mounted in grid mode ───────────── */}
+        {isGridMode && (
+          <GridHoverLayer
+            georaster={activeGeoRaster}
+            units={display.legendUnits ?? display.units}
+          />
+        )}
+
+        {/* ── Choropleth mode ──────────────────────────────────────────── */}
         {!isGridMode && baseData?.statesGeoJSON && (
           <ChoroplethLayer
             key={`ch-${controls.year}-${controls.satellite}-${colKey}`}
@@ -456,19 +526,20 @@ export function MapView() {
           />
         )}
 
-        {/* ── Grid mode — raster TIF ───────────────────────────────────────── */}
+        {/* ── Grid mode — raster TIF ───────────────────────────────────── */}
         {isGridMode && tifUrl && (
           <RasterLayer
-            key={tifUrl}         
+            key={tifUrl}
             tifUrl={tifUrl}
             domainMin={rasterDomain.min}
             domainMax={rasterDomain.max}
             colorStops={colorStops}
             opacity={controls.opacity ?? 0.7}
+            onGeoRasterReady={setActiveGeoRaster}
           />
         )}
 
-        {/* ── State borders (grid mode) — for click-to-select-state ───────── */}
+        {/* ── State borders (grid mode) — click-to-select ──────────────── */}
         {isGridMode && baseData?.statesGeoJSON && (
           <StateBorderLayer
             geojson={baseData.statesGeoJSON}

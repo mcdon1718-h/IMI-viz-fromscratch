@@ -19,6 +19,63 @@ import {
   activeYears,
 }                                  from '../utils/emissionsUtils';
 
+// ─── Custom tooltip ───────────────────────────────────────────────────────────
+// Recharts clones this element and injects active / payload / label as props.
+// Entries at index 0 and 2 (the uncertainty bounds) get the dimmer colour;
+// index 1 (the central value line) gets the bright colour.
+
+const DIM_COLOR    = '#99a7b9';   // slate-500 — readable but clearly secondary
+const BRIGHT_COLOR = '#e2e8f0';   // slate-200 — primary value
+
+function TimeSeriesCustomTooltip({ active, payload, label, units, accent }) {
+  if (!active || !payload?.length) return null;
+
+  // Recharts emits payload in render order (max, min, value).
+  // Re-sort so Emissions sits between the two uncertainty bounds.
+  const RANK = { max: 0, value: 1, min: 2 };
+  const orderedPayload = [...payload].sort(
+    (a, b) => (RANK[a.dataKey] ?? 99) - (RANK[b.dataKey] ?? 99),
+  );
+
+  return (
+    <div style={{
+      background:   '#1a1d27',
+      border:       '1px solid #2d3148',
+      borderRadius: '6px',
+      padding:      '0.4rem 0.65rem',
+      fontSize:     '0.85rem',
+      lineHeight:   1.65,
+      minWidth:     '9rem',
+    }}>
+      <div style={{ color: accent, fontWeight: 700, marginBottom: '0.15rem' }}>
+        {label}
+      </div>
+
+      {orderedPayload.map((entry, i) => {
+        const isDimmed = i === 0 || i === 2;
+        const color    = isDimmed ? DIM_COLOR : BRIGHT_COLOR;
+        const val      = entry.value;
+
+        return (
+          <div key={entry.dataKey} style={{ color, display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
+            <span style={{ opacity: isDimmed ? 0.75 : 1 }}>{entry.name}</span>
+            <span style={{ fontWeight: isDimmed ? 400 : 600 }}>
+              {val != null ? Number(val).toFixed(3) : 'N/A'}
+              {units && (
+                <span style={{ opacity: 0.6, fontSize: '0.68rem', marginLeft: '0.2rem' }}>
+                  {units}
+                </span>
+              )}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── TimeSeriesPlot ───────────────────────────────────────────────────────────
+
 export function TimeSeriesPlot() {
   const { activeDataset, activeFamily, controls, selectedState } = useDatasetContext();
   const { data: baseData } = useEmissionData();
@@ -59,7 +116,7 @@ export function TimeSeriesPlot() {
       <ResponsiveContainer width="100%" height={160}>
         <ComposedChart
           data={chartData}
-          margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+          margin={{ top: 22, right: 16, left: 0, bottom: 0 }}
         >
           <CartesianGrid
             strokeDasharray="3 3"
@@ -67,26 +124,30 @@ export function TimeSeriesPlot() {
           />
           <XAxis
             dataKey="year"
-            tick={{ fill: '#94a3b8', fontSize: 11 }}
+            tick={{ fill: '#94a3b8', fontSize: 13 }}
             axisLine={{ stroke: '#2d3148' }}
             tickLine={false}
           />
           <YAxis
-            tick={{ fill: '#94a3b8', fontSize: 11 }}
+            tick={{ fill: '#94a3b8', fontSize: 13 }}
             axisLine={{ stroke: '#2d3148' }}
             tickLine={false}
             width={52}
           />
+
           <Tooltip
-            contentStyle={{
-              background:   '#1a1d27',
-              border:       '1px solid #2d3148',
-              borderRadius: '6px',
-              color:        '#f1f5f9',
-              fontSize:     '0.75rem',
+            content={
+              <TimeSeriesCustomTooltip
+                units={activeDataset.display.units}
+                accent={accent}
+              />
+            }
+            cursor={{
+              stroke:        accent,
+              strokeOpacity: 0.4,
+              strokeWidth:   1,
+              strokeDasharray: '4 4',
             }}
-            formatter={(v) => [v != null ? v.toFixed(3) : 'N/A', activeDataset.display.units]}
-            labelStyle={{ color: accent, fontWeight: 600 }}
           />
 
           {showUncertainty && (
@@ -94,6 +155,7 @@ export function TimeSeriesPlot() {
               <Area
                 type="monotone"
                 dataKey="max"
+                name="Upper bound"
                 stroke="none"
                 fill={accentDim}
                 legendType="none"
@@ -102,6 +164,7 @@ export function TimeSeriesPlot() {
               <Area
                 type="monotone"
                 dataKey="min"
+                name="Lower bound"
                 stroke="none"
                 fill="#0f1117"
                 legendType="none"
@@ -113,6 +176,7 @@ export function TimeSeriesPlot() {
           <Line
             type="monotone"
             dataKey="value"
+            name="Emissions"
             stroke={accent}
             strokeWidth={2}
             dot={{ r: 3, fill: accent, strokeWidth: 0 }}
@@ -127,7 +191,7 @@ export function TimeSeriesPlot() {
             label={{
               value:    controls.year,
               fill:     accent,
-              fontSize: 10,
+              fontSize: 12,
               position: 'top',
             }}
           />

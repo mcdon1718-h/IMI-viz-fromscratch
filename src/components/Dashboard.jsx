@@ -28,13 +28,18 @@ export function Dashboard() {
       <div className="dashboard-body">
         <aside className="dashboard-sidebar">
 
-          <div className="dataset-info">
+          {/* Family badge + region selector on the same row */}
+          <div className="sidebar-badge-row">
             <span className="dataset-family-badge">{activeFamily.label}</span>
+            <DatasetSelector />
+          </div>
+
+          {/* Dataset title + description */}
+          <div className="dataset-info">
             <h2>{activeDataset.name}</h2>
             <p>{activeDataset.description}</p>
           </div>
 
-          <DatasetSelector />
           <ControlPanel />
           <Legend />
           <SectorBarChart />

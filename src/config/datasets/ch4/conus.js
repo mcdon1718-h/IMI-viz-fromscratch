@@ -33,31 +33,35 @@ registerDataset({
     },
     {
       key:     'satellite',
-      label:   'Data Source',
+      label:   'Source',
       type:    'select',
+      group:   'selects-row',
       options: [
-        { value: 'ghgi_tropomi', label: 'GHGI + TROPOMI (Posterior)' },
-        { value: 'ghgi',         label: 'GHGI Only (Prior)'          },
+        { value: 'ghgi_tropomi', label: 'GHGI & TROPOMI' },
+        { value: 'ghgi',         label: 'GHGI'     },
       ],
       default: 'ghgi_tropomi',
-    },
-    {
-      key:     'year',
-      label:   'Year',
-      type:    'slider',
-      options: (controls) =>
-        controls.satellite === 'ghgi'
-          ? [2019, 2020]
-          : [2019, 2020, 2021, 2022, 2023, 2024],
-      default: 2022,
     },
     {
       key:        'sector',
       label:      'Sector',
       type:       'select',
+      group:      'selects-row',
       getOptions: (baseData) =>
         (baseData?.sectorKeys ?? []).map(s => ({ value: s, label: labelSector(s) })),
       default: 'Total_ExclSoilAbs',
+    },
+    {
+      key:     'year',
+      label:   'Year',
+      type:    'select',
+      group:   'selects-row',
+      options: (controls) =>
+        (controls.satellite === 'ghgi'
+          ? [2019, 2020]
+          : [2019, 2020, 2021, 2022, 2023, 2024]
+        ).map(y => ({ value: y, label: String(y) })),
+      default: 2022,
     },
     {
       key:     'opacity',
@@ -66,7 +70,6 @@ registerDataset({
       options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
       default: 0.7,
       format:  v => `${Math.round(v * 100)}%`,
-      // ← now driven by viewMode, not selectedState
       visible: (controls) => controls.viewMode === 'grid',
     },
     {
@@ -76,7 +79,6 @@ registerDataset({
       options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 2.0],
       default: 1.0,
       format:  v => `${Math.round(v * 100)}%`,
-      // ← same
       visible: (controls) => controls.viewMode === 'grid',
     },
   ],
