@@ -92,7 +92,7 @@ registerDataset({
         { value: 'grid',       label: 'Grid'       },
         { value: 'choropleth', label: 'Shaded Map' },
       ],
-      default: 'choropleth',
+      default: 'grid',
     },
     {
       key:     'sector',

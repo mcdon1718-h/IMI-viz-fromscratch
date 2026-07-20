@@ -14,28 +14,31 @@ import { useDatasetContext }        from '../context/DatasetContext';
 import { useEmissionData }          from '../hooks/useEmissionData';
 import {
   buildLineData,
+  buildBottomUpLineData,
   labelSector,
   hasUncertainty,
   activeYears,
 }                                  from '../utils/emissionsUtils';
 
-// ─── Custom tooltip ───────────────────────────────────────────────────────────
-// Recharts clones this element and injects active / payload / label as props.
-// Entries at index 0 and 2 (the uncertainty bounds) get the dimmer colour;
-// index 1 (the central value line) gets the bright colour.
-
-const DIM_COLOR    = '#99a7b9';   // slate-500 — readable but clearly secondary
-const BRIGHT_COLOR = '#e2e8f0';   // slate-200 — primary value
+const DIM_COLOR    = '#99a7b9';
+const BRIGHT_COLOR = '#e2e8f0';
+const TEAL_COLOR   = '#14b8a6';
 
 function TimeSeriesCustomTooltip({ active, payload, label, units, accent }) {
   if (!active || !payload?.length) return null;
 
-  // Recharts emits payload in render order (max, min, value).
-  // Re-sort so Emissions sits between the two uncertainty bounds.
-  const RANK = { max: 0, value: 1, min: 2 };
-  const orderedPayload = [...payload].sort(
-    (a, b) => (RANK[a.dataKey] ?? 99) - (RANK[b.dataKey] ?? 99),
-  );
+  // Index by dataKey for reliable lookup regardless of render order
+  const byKey = Object.fromEntries(payload.map(p => [p.dataKey, p]));
+
+  const rows = [];
+  if (byKey.max)
+    rows.push({ name: 'Upper bound', value: byKey.max.value,     color: DIM_COLOR,    weight: 400 });
+  if (byKey.value)
+    rows.push({ name: 'Posterior',   value: byKey.value.value,   color: BRIGHT_COLOR, weight: 600 });
+  if (byKey.min)
+    rows.push({ name: 'Lower bound', value: byKey.min.value,     color: DIM_COLOR,    weight: 400 });
+  if (byKey.bottomUp && byKey.bottomUp.value != null)
+    rows.push({ name: 'Bottom-up',   value: byKey.bottomUp.value, color: TEAL_COLOR,  weight: 600 });
 
   return (
     <div style={{
@@ -50,31 +53,25 @@ function TimeSeriesCustomTooltip({ active, payload, label, units, accent }) {
       <div style={{ color: accent, fontWeight: 700, marginBottom: '0.15rem' }}>
         {label}
       </div>
-
-      {orderedPayload.map((entry, i) => {
-        const isDimmed = i === 0 || i === 2;
-        const color    = isDimmed ? DIM_COLOR : BRIGHT_COLOR;
-        const val      = entry.value;
-
-        return (
-          <div key={entry.dataKey} style={{ color, display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
-            <span style={{ opacity: isDimmed ? 0.75 : 1 }}>{entry.name}</span>
-            <span style={{ fontWeight: isDimmed ? 400 : 600 }}>
-              {val != null ? Number(val).toFixed(3) : 'N/A'}
-              {units && (
-                <span style={{ opacity: 0.6, fontSize: '0.68rem', marginLeft: '0.2rem' }}>
-                  {units}
-                </span>
-              )}
-            </span>
-          </div>
-        );
-      })}
+      {rows.map(row => (
+        <div
+          key={row.name}
+          style={{ color: row.color, display: 'flex', justifyContent: 'space-between', gap: '1rem' }}
+        >
+          <span>{row.name}</span>
+          <span style={{ fontWeight: row.weight }}>
+            {row.value != null ? Number(row.value).toFixed(3) : 'N/A'}
+            {units && (
+              <span style={{ opacity: 0.6, fontSize: '0.68rem', marginLeft: '0.2rem' }}>
+                {units}
+              </span>
+            )}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
-
-// ─── TimeSeriesPlot ───────────────────────────────────────────────────────────
 
 export function TimeSeriesPlot() {
   const { activeDataset, activeFamily, controls, selectedState } = useDatasetContext();
@@ -94,14 +91,25 @@ export function TimeSeriesPlot() {
   });
 
   const showUncertainty = hasUncertainty(controls.satellite);
+  const showBottomUp    = controls.satellite === 'ghgi_tropomi' && activeDataset.id === 'ch4-conus';
   const accent          = activeFamily.theme.accent;
   const accentDim       = activeFamily.theme.accentDim;
 
+  const bottomUpLine = showBottomUp
+    ? buildBottomUpLineData(baseData, {
+        mode,
+        sectorKey:     controls.sector,
+        selectedState,
+      })
+    : null;
+
   const chartData = lineData.years.map((year, i) => ({
     year,
-    value: lineData.values[i],
-    min:   lineData.mins[i],
-    max:   lineData.maxs[i],
+    value:    lineData.values[i],
+    min:      lineData.mins[i],
+    max:      lineData.maxs[i],
+    // undefined (not null) when showBottomUp is false so Recharts ignores the key entirely
+    ...(showBottomUp && { bottomUp: bottomUpLine?.values[i] ?? null }),
   }));
 
   return (
@@ -118,10 +126,7 @@ export function TimeSeriesPlot() {
           data={chartData}
           margin={{ top: 22, right: 16, left: 0, bottom: 0 }}
         >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke="rgba(255,255,255,0.06)"
-          />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
           <XAxis
             dataKey="year"
             tick={{ fill: '#94a3b8', fontSize: 13 }}
@@ -143,13 +148,14 @@ export function TimeSeriesPlot() {
               />
             }
             cursor={{
-              stroke:        accent,
-              strokeOpacity: 0.4,
-              strokeWidth:   1,
+              stroke:          accent,
+              strokeOpacity:   0.4,
+              strokeWidth:     1,
               strokeDasharray: '4 4',
             }}
           />
 
+          {/* Uncertainty band */}
           {showUncertainty && (
             <>
               <Area
@@ -173,15 +179,31 @@ export function TimeSeriesPlot() {
             </>
           )}
 
+          {/* Posterior line */}
           <Line
             type="monotone"
             dataKey="value"
-            name="Emissions"
+            name="Posterior"
             stroke={accent}
             strokeWidth={2}
             dot={{ r: 3, fill: accent, strokeWidth: 0 }}
             activeDot={{ r: 5, strokeWidth: 0 }}
           />
+
+          {/* Bottom-up line (teal, dashed) — ghgi_tropomi only */}
+          {showBottomUp && (
+            <Line
+              type="monotone"
+              dataKey="bottomUp"
+              name="Bottom-up"
+              stroke={TEAL_COLOR}
+              strokeWidth={2}
+              strokeDasharray="5 3"
+              dot={{ r: 3, fill: TEAL_COLOR, strokeWidth: 0 }}
+              activeDot={{ r: 5, strokeWidth: 0 }}
+              connectNulls={false}
+            />
+          )}
 
           <ReferenceLine
             x={controls.year}

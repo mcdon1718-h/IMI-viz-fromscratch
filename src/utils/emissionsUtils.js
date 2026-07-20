@@ -81,27 +81,42 @@ export function activeYears(satellite) {
 
 // ─── Bar chart data builder ───────────────────────────────────────────────────
 export function buildBarData(baseData, { year, mode, satellite, selectedState }) {
-  const { byYear, nationalPosterior, nationalPrior, sectorKeys } = baseData;
+  const { byYear, nationalPosterior, nationalPrior, stateByYearPrior, sectorKeys } = baseData;
 
+  // Determine source row and whether columns use bare keys or _posterior suffix
   let row;
+  let bareKeys;  // true = bare sector key, false = _posterior suffix
+
   if (mode === 'national') {
-    row = satellite === 'ghgi'
+    row      = satellite === 'ghgi'
       ? (nationalPrior?.[year]     ?? null)
       : (nationalPosterior?.[year] ?? null);
+    bareKeys = true;  // both national CSVs use bare keys
   } else {
-    row = selectedState ? (byYear?.[year]?.[selectedState] ?? null) : null;
+    if (!selectedState) return { labels: [], values: [], mins: [], maxs: [] };
+    if (satellite === 'ghgi') {
+      row      = stateByYearPrior?.[year]?.[selectedState] ?? null;
+      bareKeys = true;   // state prior CSV uses bare keys
+    } else {
+      row      = byYear?.[year]?.[selectedState] ?? null;
+      bareKeys = false;  // state posterior CSV uses _posterior suffix
+    }
   }
 
   if (!row || !sectorKeys.length) {
     return { labels: [], values: [], mins: [], maxs: [] };
   }
 
-  const values = sectorKeys.map(s =>
-    parseNumber(row[centralCol(s, mode, satellite)])
-  );
+  const getVal = (s) => parseNumber(row[bareKeys ? s : `${s}_posterior`]);
+  const values = sectorKeys.map(s => getVal(s));
 
   if (!hasUncertainty(satellite)) {
-    return { labels: sectorKeys, values, mins: values.map(() => null), maxs: values.map(() => null) };
+    return {
+      labels: sectorKeys,
+      values,
+      mins: values.map(() => null),
+      maxs: values.map(() => null),
+    };
   }
 
   return {
@@ -114,8 +129,13 @@ export function buildBarData(baseData, { year, mode, satellite, selectedState })
 
 // ─── Time series data builder ─────────────────────────────────────────────────
 export function buildLineData(baseData, { mode, sectorKey, satellite, selectedState }) {
-  const { byYear, nationalPosterior, nationalPrior } = baseData;
+  const { byYear, nationalPosterior, nationalPrior, stateByYearPrior } = baseData;
   const years = activeYears(satellite);
+
+  // national CSVs and state prior CSV all use bare keys;
+  // state posterior CSV uses _posterior suffix
+  const bareKeys = mode === 'national' || satellite === 'ghgi';
+  const col      = bareKeys ? sectorKey : `${sectorKey}_posterior`;
 
   function getRow(year) {
     if (mode === 'national') {
@@ -123,16 +143,24 @@ export function buildLineData(baseData, { mode, sectorKey, satellite, selectedSt
         ? (nationalPrior?.[year]     ?? null)
         : (nationalPosterior?.[year] ?? null);
     }
-    return selectedState ? (byYear?.[year]?.[selectedState] ?? null) : null;
+    if (!selectedState) return null;
+    return satellite === 'ghgi'
+      ? (stateByYearPrior?.[year]?.[selectedState] ?? null)
+      : (byYear?.[year]?.[selectedState]           ?? null);
   }
 
   const values = years.map(y => {
     const row = getRow(y);
-    return row ? parseNumber(row[centralCol(sectorKey, mode, satellite)]) : null;
+    return row ? parseNumber(row[col]) : null;
   });
 
   if (!hasUncertainty(satellite)) {
-    return { years, values, mins: years.map(() => null), maxs: years.map(() => null) };
+    return {
+      years,
+      values,
+      mins: years.map(() => null),
+      maxs: years.map(() => null),
+    };
   }
 
   return {
@@ -156,4 +184,53 @@ export function computeChoroplethDomain(baseData, year, satellite, sector) {
 
   if (!values.length) return { min: 0, max: 10 };
   return { min: Math.min(...values), max: Math.max(...values) };
+}
+
+// ─── Bottom-up data builders (used only in ghgi_tropomi mode) ─────────────────
+
+/**
+ * Pull prior (bottom-up) values for the sector bar chart.
+ * National: reads bare keys from nationalPrior (consistent across all years).
+ * State:    reads _prior columns from byYear (present for all years in estrada CSVs).
+ */
+export function buildBottomUpBarData(baseData, { year, mode, selectedState }) {
+  const { byYear, nationalPrior, sectorKeys } = baseData;
+  if (!sectorKeys?.length) return { labels: [], values: [] };
+
+  if (mode === 'national') {
+    const row = nationalPrior?.[year];
+    if (!row) return { labels: [], values: [] };
+    return {
+      labels: sectorKeys,
+      values: sectorKeys.map(s => parseNumber(row[s])),
+    };
+  }
+
+  const row = selectedState ? byYear?.[year]?.[selectedState] : null;
+  if (!row) return { labels: [], values: [] };
+  return {
+    labels: sectorKeys,
+    values: sectorKeys.map(s => parseNumber(row[`${s}_prior`])),
+  };
+}
+
+/**
+ * Pull prior (bottom-up) time series values for a single sector.
+ * Covers all posterior years (2019-2024); national prior is now populated
+ * for all years after the dataLoader extension above.
+ */
+export function buildBottomUpLineData(baseData, { mode, sectorKey, selectedState }) {
+  const years = [2019, 2020, 2021, 2022, 2023, 2024];
+  const { byYear, nationalPrior } = baseData;
+
+  const values = years.map(y => {
+    if (mode === 'national') {
+      return parseNumber(nationalPrior?.[y]?.[sectorKey]);
+    }
+    return selectedState
+      ? parseNumber(byYear?.[y]?.[selectedState]?.[`${sectorKey}_prior`])
+      : null;
+  });
+
+  return { years, values };
 }

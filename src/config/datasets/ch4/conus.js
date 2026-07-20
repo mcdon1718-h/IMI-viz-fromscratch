@@ -7,7 +7,7 @@ const DATA_ROOT = '/data/ch4_conus';
 registerDataset({
   id:       'ch4-conus',
   family:   'CH4',
-  name:     'Continental USA',
+  name:     'Contiguous USA',
   dataRoot: DATA_ROOT,
   description: 'Emissions are derived from the U.S. GHGI and TROPOMI satellite observations. See Estrada et al. (2026) for details.',
 
@@ -37,8 +37,8 @@ registerDataset({
       type:    'select',
       group:   'selects-row',
       options: [
-        { value: 'ghgi_tropomi', label: 'GHGI + TROPOMI' },
-        { value: 'ghgi',         label: 'GHGI Only'      },
+        { value: 'ghgi_tropomi', label: 'Top-down, posterior (GHGI & TROPOMI)' },
+        { value: 'ghgi',         label: 'Bottom-up, prior (GHGI)'      },
       ],
       default: 'ghgi_tropomi',
     },
@@ -148,6 +148,27 @@ registerDataset({
     for (const r of nationalPriorRows) {
       const y = Number(r.Year);
       if (Number.isFinite(y)) nationalPrior[y] = r;
+    }
+
+    // ── Extend nationalPrior to 2021-2024 by summing _prior columns from state data
+    for (const year of ALL_YEARS.filter(y => y > 2020)) {
+      const stateRows = Object.values(byYear[year] ?? {});
+      if (!stateRows.length) continue;
+
+      const priorCols = Object.keys(stateRows[0]).filter(k => k.endsWith('_prior'));
+      if (!priorCols.length) continue;
+
+      const natRow = {};
+      for (const col of priorCols) {
+        let sum = 0, hasAny = false;
+        for (const row of stateRows) {
+          const v = Number(row[col]);
+          if (Number.isFinite(v)) { sum += v; hasAny = true; }
+        }
+        // Strip _prior suffix to match the bare-key format of the 2019-2020 national prior
+        natRow[col.replace(/_prior$/, '')] = hasAny ? sum : null;
+      }
+      nationalPrior[year] = natRow;
     }
 
     // ── State bottom-up prior: { [year]: { [stateName]: row } } ──────────
