@@ -1,0 +1,205 @@
+import { registerDataset } from '../../datasetRegistry';
+
+const ALL_YEARS  = [2019, 2020, 2021, 2022, 2023, 2024];
+const DATA_ROOT  = '/data/ch4_colombia';
+
+// Bar chart shows individual sectors; TotalAnth is the aggregate and is excluded
+const BAR_SECTOR_KEYS = ['Coal', 'OilGas', 'Livestock', 'Reservoirs', 'Rice', 'Waste', 'Other'];
+
+// Time-series / map sector dropdown includes the total
+const SECTOR_OPTIONS = [
+  { value: 'TotalAnth',  label: 'Total'      },
+  { value: 'Coal',       label: 'Coal'        },
+  { value: 'OilGas',     label: 'Oil/Gas'     },
+  { value: 'Livestock',  label: 'Livestock'   },
+  { value: 'Reservoirs', label: 'Reservoirs'  },
+  { value: 'Rice',       label: 'Rice'        },
+  { value: 'Waste',      label: 'Waste'       },
+  { value: 'Other',      label: 'Other Anth.' },
+];
+
+/**
+ * Transform a chart_summary entry { sector: { value, min, max } } into a flat row.
+ *
+ *  forState = false  →  bare keys          (national:  row.TotalAnth)
+ *  forState = true   →  _posterior suffix  (province:  row.TotalAnth_posterior)
+ *
+ * Also pre-aggregates:
+ *   Waste  = Landfills + Wastewater
+ *   Other  = OtherAnth
+ */
+function flattenEntry(entry, forState) {
+  if (!entry || typeof entry !== 'object') return {};
+  const toN = v => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
+  const row = {};
+
+  for (const [k, vr] of Object.entries(entry)) {
+    if (!vr || typeof vr !== 'object') continue;
+    row[forState ? `${k}_posterior` : k] = toN(vr.value);
+    row[`${k}_min`] = toN(vr.min);
+    row[`${k}_max`] = toN(vr.max);
+  }
+
+  // Waste = Landfills + Wastewater (treat a missing component as 0)
+  const lf = entry.Landfills, ww = entry.Wastewater;
+  const hasWaste = lf?.value != null || ww?.value != null;
+  if (hasWaste) {
+    const lfV = lf?.value != null ? toN(lf.value) : 0;
+    const wwV = ww?.value != null ? toN(ww.value) : 0;
+    row[forState ? 'Waste_posterior' : 'Waste'] = (lfV ?? 0) + (wwV ?? 0);
+    row['Waste_min'] = (lf?.min != null || ww?.min != null)
+      ? (lf?.min != null ? toN(lf.min) : 0) + (ww?.min != null ? toN(ww.min) : 0)
+      : null;
+    row['Waste_max'] = (lf?.max != null || ww?.max != null)
+      ? (lf?.max != null ? toN(lf.max) : 0) + (ww?.max != null ? toN(ww.max) : 0)
+      : null;
+  }
+
+  // Other = OtherAnth
+  const oth = entry.OtherAnth ?? entry.Other;
+  if (oth) {
+    row[forState ? 'Other_posterior' : 'Other'] = toN(oth.value);
+    row['Other_min'] = toN(oth.min);
+    row['Other_max'] = toN(oth.max);
+  }
+
+  return row;
+}
+
+registerDataset({
+  id:       'ch4-colombia',
+  family:   'CH4',
+  name:     'Colombia',
+  dataRoot: DATA_ROOT,
+  description: 'Anthropogenic methane emissions are derived from bottom-up inventories constrained with TROPOMI satellite observations. See Hancock et al. (2026) for more details.',
+
+  reloadTrigger: [],   // load all data once on dataset mount
+  gridType:      'json', // signals MapView to use JsonGridLayer instead of RasterLayer
+
+  mapConfig: {
+    initialViewState: { latitude: 4.5, longitude: -74.0, zoom: 5 },
+    minZoom:   4,
+    maxZoom:   12,
+    maxBounds: [[-6.5, -80.8], [14.8, -66.5]],
+  },
+
+  controls: [
+    {
+      key:     'viewMode',
+      label:   'Map View',
+      type:    'radio',
+      options: [
+        { value: 'grid',       label: 'Grid'       },
+        { value: 'choropleth', label: 'Shaded Map' },
+      ],
+      default: 'grid',
+    },
+    {
+      key:     'sector',
+      label:   'Sector',
+      type:    'select',
+      group:   'selects-row',
+      options: SECTOR_OPTIONS,
+      default: 'TotalAnth',
+    },
+    {
+      key:     'year',
+      label:   'Year',
+      type:    'select',
+      group:   'selects-row',
+      options: ALL_YEARS.map(y => ({ value: y, label: String(y) })),
+      default: 2022,
+    },
+    {
+      key:     'opacity',
+      label:   'Layer Opacity',
+      type:    'slider',
+      options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+      default: 0.65,
+      format:  v => `${Math.round(v * 100)}%`,
+      visible: c => c.viewMode === 'grid',
+    },
+    {
+      key:     'maxEmission',
+      label:   'Color Scale Max',
+      type:    'slider',
+      options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 2.0],
+      default: 0.6,
+      format:  v => `${Math.round(v * 100)}%`,
+      visible: c => c.viewMode === 'grid',
+    },
+  ],
+
+  display: {
+    units:       'Tg/yr',
+    legendTitle: 'CH₄ Emissions',
+    legendUnits: 'kg km⁻² h⁻¹',
+    colorScale: {
+      stops: [
+        [0,    '#ffffcc'],
+        [0.15, '#feb24c'],
+        [0.4,  '#fd8d3c'],
+        [0.65, '#e31a1c'],
+        [1.0,  '#800026'],
+      ],
+    },
+  },
+
+  async dataLoader() {
+    const [chartData, provinceGeoJSON] = await Promise.all([
+      fetch(`${DATA_ROOT}/chart/chart_summary.json`).then(r => {
+        if (!r.ok) throw new Error(`chart_summary.json: HTTP ${r.status}`);
+        return r.json();
+      }),
+      fetch(`${DATA_ROOT}/geo/province_geojson.json`).then(r => {
+        if (!r.ok) throw new Error(`province_geojson.json: HTTP ${r.status}`);
+        return r.json();
+      }),
+    ]);
+
+    const annual = chartData.annual ?? {};
+    // Prefer year list from JSON; fall back to ALL_YEARS
+    const years = (annual.years ?? ALL_YEARS.map(String)).map(Number);
+
+    // ── National totals (bare-key columns) ──────────────────────────────
+    const nationalPosterior = {};
+    for (const yr of years) {
+      const entry = annual.colombia?.[String(yr)];
+      if (entry) nationalPosterior[yr] = flattenEntry(entry, false);
+    }
+
+    // ── Department / province data (_posterior columns) ──────────────────
+    const byYear = {};
+    for (const yr of years) {
+      byYear[yr] = {};
+      for (const [name, pYears] of Object.entries(annual.provinces ?? {})) {
+        const entry = pYears[String(yr)];
+        if (entry) byYear[yr][name] = flattenEntry(entry, true);
+      }
+    }
+
+    // ── Grid file paths ──────────────────────────────────────────────────
+    // chart_summary paths look like "data/grid/annual/2019/Coal.json"
+    // → resolved to "/data/ch4_colombia/grid/annual/2019/Coal.json"
+    const gridFiles = {};
+    for (const [yrStr, secs] of Object.entries(chartData.grid_files?.annual ?? {})) {
+      const yr = Number(yrStr);
+      gridFiles[yr] = {};
+      for (const [sec, path] of Object.entries(secs)) {
+        gridFiles[yr][sec] = `${DATA_ROOT}/${String(path).replace(/^data\//, '')}`;
+      }
+    }
+
+    return {
+      byYear,
+      nationalPosterior,
+      nationalPrior:    null,
+      stateByYearPrior: {},
+      sectorKeys:       BAR_SECTOR_KEYS,  // drives bar chart only
+      statesGeoJSON:    provinceGeoJSON,
+      gridMeta:         chartData.grid ?? null,
+      gridFiles,
+      manifest:         null,
+    };
+  },
+});

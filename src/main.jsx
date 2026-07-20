@@ -1,6 +1,10 @@
 import React    from 'react'
 import ReactDOM from 'react-dom/client'
 import App      from './App.jsx'
+import * as L   from 'leaflet'
+
+// georaster-layer-for-leaflet requires L on window
+window.L = L
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -21,9 +25,6 @@ class ErrorBoundary extends React.Component {
           <h2>Render Error</h2>
           <pre style={{ whiteSpace: 'pre-wrap', marginTop: '1rem' }}>
             {this.state.error.message}
-          </pre>
-          <pre style={{ whiteSpace: 'pre-wrap', marginTop: '1rem', color: '#aaa', fontSize: '0.8rem' }}>
-            {this.state.error.stack}
           </pre>
         </div>
       )

@@ -6,7 +6,7 @@
   --text-primary: #f1f5f9;
   --text-muted:   #94a3b8;
   --border:       #2d3148;
-  --sidebar-w:    280px;
+  --sidebar-w:    500px;
   --header-h:     56px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -24,8 +24,23 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
 .dashboard-sidebar    { width: var(--sidebar-w); background: var(--bg-secondary);
                         border-right: 1px solid var(--border); padding: 1rem;
                         display: flex; flex-direction: column; gap: 1.5rem;
-                        overflow-y: auto; flex-shrink: 0; }
-.dashboard-main       { flex: 1; position: relative; overflow: hidden; }
+                        flex-shrink: 0; overflow-y: auto;
+                        overflow-x: hidden;}
+.dashboard-main       { flex: 1; position: relative; overflow: hidden; min-width: 0; }
+
+/* Warning banner for no data (only shown for CO2 family) */
+.family-warning-banner {
+  width:            100%;
+  padding:          .5rem 1rem;
+  background:       rgba(239, 68, 68, 0.15);
+  border-bottom:    1px solid #ef4444;
+  color:            #fca5a5;
+  font-size:        .82rem;
+  font-weight:      500;
+  text-align:       center;
+  flex-shrink:      0;
+}
+
 
 /* ── Family theming ────────────────────────────────────────────────────────────
    All components use var(--accent) — changing it here re-themes everything.   */
@@ -128,15 +143,42 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
   background:       var(--accent-dim);
   border:           1px solid var(--accent);
   color:            var(--accent);
-  font-size:        .65rem;
+  font-size:        .85rem;
   font-weight:      700;
   letter-spacing:   .06em;
   margin-bottom:    .4rem;
 }
 
 /* Dataset info */
-.dataset-info h2      { font-size: .85rem; font-weight: 600; margin-bottom: .3rem; }
+.dataset-info h2      { font-size: 2.85rem; font-weight: 600; margin-bottom: .3rem; }
 .dataset-info p       { font-size: .73rem; color: var(--text-muted); line-height: 1.5; }
+
+
+/* ── Grid cell hover tooltip ─────────────────────────────────────────────── */
+.grid-hover-tooltip {
+  position:       absolute;
+  pointer-events: none;
+  z-index:        1000;
+  background:     rgba(15, 17, 23, 0.92);
+  color:          var(--text-primary);
+  border:         1px solid var(--border);
+  border-radius:  6px;
+  padding:        .28rem .6rem;
+  font-size:      .75rem;
+  font-weight:    600;
+  white-space:    nowrap;
+  line-height:    1.4;
+  box-shadow:     0 2px 8px rgba(0, 0, 0, 0.45);
+  /* anchor the bottom of the tooltip to the cursor y */
+  transform:      translateY(-100%) translateY(-6px);
+}
+
+.grid-hover-units {
+  font-weight: 400;
+  color:       var(--text-muted);
+  font-size:   .68rem;
+  margin-left: .15rem;
+}
 
 /* Controls */
 .control-panel        { display: flex; flex-direction: column; gap: .9rem; }
@@ -152,7 +194,7 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
                         border-radius: 6px; font-size: .78rem; cursor: pointer; }
 .select-control:focus { outline: none; border-color: var(--accent); }
 .radio-control        { display: flex; flex-wrap: wrap; gap: .3rem; }
-.radio-option         { display: flex; align-items: center; gap: .25rem; font-size: .73rem;
+.radio-option         { display: flex; align-items: center; gap: .25rem; font-size: .85rem;
                         cursor: pointer; padding: .25rem .5rem; border-radius: 4px;
                         background: var(--bg-elevated); border: 1px solid var(--border);
                         transition: all .1s; user-select: none; }
@@ -170,6 +212,77 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
 .legend-units         { font-size: .68rem; color: var(--text-muted);
                         text-align: center; margin-top: .35rem; }
 
+/* ── DataTotals panel ────────────────────────────────────────────────────── */
+.data-totals-panel {
+  padding-bottom: .75rem;
+  border-bottom:  1px solid var(--border);
+}
+
+.data-totals-place {
+  font-size:      20px;
+  font-weight:    700;
+  text-align:     center;
+  letter-spacing: .06em;
+  color:          var(--text-primary);
+  margin-bottom:  .8rem;
+}
+
+.data-totals-table {
+  display:               grid;
+  grid-template-columns: auto 1fr 1fr;
+  row-gap:               .45rem;
+  column-gap:            .75rem;
+  align-items:           center;
+}
+
+.dtc-spacer { /* empty cell — holds space under the row-label column */ }
+
+.dtc-header {
+  font-size:      .65rem;
+  font-weight:    600;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color:          var(--text-muted);
+  text-align:     center;
+}
+
+.dtc-label {
+  font-size:   .78rem;
+  color:       var(--text-muted);
+  white-space: nowrap;
+}
+
+.dtc-num {
+  font-size:   1.35rem;
+  font-weight: 700;
+  text-align:  center;
+  line-height: 1.3;
+}
+
+.dtc-accent { color: var(--accent); }
+
+.dtc-dim {
+  color:       var(--text-muted);
+  opacity:     0.4;
+  font-weight: 400;
+  font-size:   1.1rem;
+}
+
+.dtc-units {
+  font-size:   .65rem;
+  font-weight: 400;
+  color:       var(--text-muted);
+  opacity:     0.85;
+}
+
+.control-group-row {
+  display:           grid;
+  grid-auto-flow:    column;
+  grid-auto-columns: 1fr;
+  gap:               0.4rem;
+  align-items:       end;
+}
+
 /* Map */
 .map-wrapper          { position: absolute; inset: 0; }
 .map-container        { width: 100%; height: 100%; }
@@ -181,4 +294,96 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
 .map-overlay.error    { background: rgba(239,68,68,.15); color: #fca5a5;
                         border: 1px solid #ef4444; }
 
-                        
+/* ── Shared chart panel wrapper ──────────────────────────────────────────────── */
+.chart-panel {
+  border-top: 1px solid var(--border);
+  padding:    .75rem 0 .25rem;
+}
+
+.chart-header {
+  display:       flex;
+  align-items:   center;
+  gap:           .4rem;
+  margin-bottom: .4rem;
+  flex-wrap:     wrap;
+}
+
+.chart-title {
+  font-size:      .95rem;
+  font-weight:    600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color:          var(--text-muted);
+}
+
+.chart-year {
+  font-size:   .68rem;
+  font-weight: 700;
+  color:       var(--accent);
+  margin-left: auto;
+}
+
+.chart-units {
+  font-size: .68rem;
+  color:     var(--text-muted);
+  opacity:   .7;
+}
+
+.chart-status {
+  font-size: .72rem;
+  color:     var(--accent);
+}
+
+.chart-status.error {
+  color: #fca5a5;
+}
+
+/* ── Time series — now in sidebar, remove the border-top override ─────────────*/
+.timeseries-panel {
+  border-top: 1px solid var(--border);
+  padding:    1.25rem 0.25rem;
+  background: transparent;    /* was var(--bg-secondary) when in main area */
+}
+
+.chart-place {
+  font-size:   1.0 rem;
+  color:       var(--accent);
+  font-weight: 600;
+}
+
+.chart-sector {
+  font-size: .85rem;
+  color:     var(--text-muted);
+}
+
+.chart-empty {
+  font-size:  0.75rem;
+  color:      var(--text-muted);
+  text-align: center;
+  padding:    1rem 0;
+  font-style: italic;
+}
+
+.map-overlay.hint {
+  background: rgba(15,17,23,.75);
+  color:      var(--text-muted);
+  border:     2px solid var(--border);
+}
+.legend-header {
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  margin-bottom:   .4rem;
+}
+
+.legend-mode-badge {
+  font-size:      .6rem;
+  font-weight:    600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding:        .1rem .35rem;
+  border-radius:  3px;
+  background:     var(--accent-dim);
+  color:          var(--accent);
+  border:         1px solid var(--accent);
+}

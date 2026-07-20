@@ -4,6 +4,7 @@ registerFamily({
   id:          'CO2',
   name:        'Carbon Dioxide',
   label:       'CO₂',
+  dashboardTitle: 'ICI Results Dashboard',        // ← add this
   description: 'Carbon dioxide emissions from combustion, industry, and land-use change.',
   theme: {
     accent:     '#3b82f6',               // blue

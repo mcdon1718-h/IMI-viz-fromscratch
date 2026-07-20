@@ -2,7 +2,6 @@ import React from 'react';
 import { useDatasetContext } from '../context/DatasetContext';
 
 export function DatasetSelector() {
-  // datasetsInActiveFamily replaces allDatasets — filtered automatically
   const { activeDataset, datasetsInActiveFamily, setActiveDataset } = useDatasetContext();
 
   return (
