@@ -47,7 +47,7 @@ function reducer(state, action) {
         const dataset     = getDataset(state.activeDatasetId);
         const yearControl = dataset.controls.find(c => c.key === 'year');
         if (yearControl?.options && typeof yearControl.options === 'function') {
-          const validYears = yearControl.options(newControls);
+          const validYears = yearControl.options(newControls).map(o => o.value);
           if (!validYears.includes(newControls.year)) {
             newControls.year = validYears[validYears.length - 1];
           }

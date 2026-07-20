@@ -44,8 +44,12 @@ export function DataTotals() {
     }
 
     // ── CONUS state ───────────────────────────────────────────────────────────
+    // sectorKeys includes 'Total_ExclSoilAbs' itself (it's a valid Sector-dropdown
+    // choice), so it must be excluded from any component sum — otherwise it gets
+    // added on top of the components it already aggregates, roughly doubling totals.
     const { sectorKeys } = baseData;
     if (!sectorKeys?.length) return empty;
+    const componentKeys = sectorKeys.filter(s => s !== 'Total_ExclSoilAbs');
 
     // Bottom-up: bare sector keys in stateByYearPrior
     const priorRow = baseData.stateByYearPrior?.[year]?.[selectedState];
@@ -53,7 +57,7 @@ export function DataTotals() {
       const v = parseNumber(priorRow?.[s]);
       return Number.isFinite(v) ? v : null;
     };
-    const priorAvail = priorRow ? sectorKeys.filter(s => getBottomUp(s) != null) : [];
+    const priorAvail = priorRow ? componentKeys.filter(s => getBottomUp(s) != null) : [];
 
     // Posterior: _posterior suffix in byYear (only when ghgi_tropomi)
     const postRow = satellite === 'ghgi_tropomi'
@@ -63,17 +67,13 @@ export function DataTotals() {
       const v = parseNumber(postRow?.[`${s}_posterior`]);
       return Number.isFinite(v) ? v : null;
     };
-    const postAvail = postRow ? sectorKeys.filter(s => getPost(s) != null) : [];
+    const postAvail = postRow ? componentKeys.filter(s => getPost(s) != null) : [];
 
     return {
-      totalBottomUp: priorAvail.length
-        ? priorAvail.reduce((acc, s) => acc + getBottomUp(s), 0)
-        : null,
+      totalBottomUp:  priorRow ? parseNumber(priorRow.Total_ExclSoilAbs)           : null,
+      totalPost:      postRow  ? parseNumber(postRow.Total_ExclSoilAbs_posterior) : null,
       anthroBottomUp: priorAvail.length
         ? priorAvail.filter(s => s !== 'Wetlands').reduce((acc, s) => acc + getBottomUp(s), 0)
-        : null,
-      totalPost: postAvail.length
-        ? postAvail.reduce((acc, s) => acc + getPost(s), 0)
         : null,
       anthroPost: postAvail.length
         ? postAvail.filter(s => s !== 'Wetlands').reduce((acc, s) => acc + getPost(s), 0)
