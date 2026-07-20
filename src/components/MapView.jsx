@@ -172,7 +172,7 @@ function MapController({ mapConfig }) {
 
 // ─── GridHoverLayer (TIF mode) ────────────────────────────────────────────────
 
-function GridHoverLayer({ georaster, units }) {
+function GridHoverLayer({ georaster, minGeoraster, maxGeoraster, units }) {
   const map = useMap();
   const [hover, setHover] = useState(null);
 
@@ -180,7 +180,10 @@ function GridHoverLayer({ georaster, units }) {
     mousemove(e) {
       if (!georaster) { setHover(null); return; }
       const val = getValueAtLatLng(georaster, e.latlng.lat, e.latlng.lng);
-      setHover(val != null ? { point: e.containerPoint, value: val } : null);
+      if (val == null) { setHover(null); return; }
+      const min = minGeoraster ? getValueAtLatLng(minGeoraster, e.latlng.lat, e.latlng.lng) : null;
+      const max = maxGeoraster ? getValueAtLatLng(maxGeoraster, e.latlng.lat, e.latlng.lng) : null;
+      setHover({ point: e.containerPoint, value: val, min, max });
     },
     mouseout()  { setHover(null); },
     dragstart() { setHover(null); },
@@ -188,16 +191,45 @@ function GridHoverLayer({ georaster, units }) {
 
   if (!hover) return null;
 
+  // Ensemble min/max only exist for posterior data -- when either is
+  // unavailable (e.g. GHGI-prior, or this cell has no ensemble coverage)
+  // the tooltip just falls back to showing the central value alone.
+  const spread = (hover.min != null && hover.max != null)
+    ? (hover.max - hover.min) / 2
+    : null;
+
   return createPortal(
     <div
       className="grid-hover-tooltip"
       style={{ left: hover.point.x + 14, top: hover.point.y }}
     >
       {hover.value.toFixed(3)}
+      {spread != null && <span className="grid-hover-spread"> ± {spread.toFixed(3)}</span>}
       {units && <span className="grid-hover-units"> {units}</span>}
     </div>,
     map.getContainer(),
   );
+}
+
+// ─── useGeoraster (fetch + parse only, no map layer) ──────────────────────────
+// Used for the min/max ensemble rasters, which back the hover tooltip but are
+// never drawn on the map themselves.
+
+function useGeoraster(url) {
+  const [georaster, setGeoraster] = useState(null);
+
+  useEffect(() => {
+    if (!url) { setGeoraster(null); return undefined; }
+    let cancelled = false;
+    fetch(url)
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status} — ${url}`); return r.arrayBuffer(); })
+      .then(buf => parseGeoraster(buf))
+      .then(gr  => { if (!cancelled) setGeoraster(gr); })
+      .catch(err => { if (!cancelled) console.error('[useGeoraster] load error:', err.message); });
+    return () => { cancelled = true; };
+  }, [url]);
+
+  return georaster;
 }
 
 // ─── JsonGridHoverLayer ───────────────────────────────────────────────────────
@@ -573,6 +605,28 @@ export function MapView() {
     controls.year, controls.satellite, dataRoot,
   ]);
 
+  // ── Ensemble min/max URLs (posterior hover uncertainty, CONUS grid mode) ──
+  // Only populated for posterior years in manifest.json -- absent for
+  // "_prior" (GHGI has no ensemble), so these resolve to null there.
+  const minTifUrl = useMemo(() => {
+    if (!baseData?.manifest || !isGridMode) return null;
+    const entry = getManifestEntry(
+      baseData.manifest, controls.sector, controls.year, controls.satellite,
+    );
+    return entry?.minTif ? resolveTifUrl(dataRoot ?? '', entry.minTif) : null;
+  }, [baseData?.manifest, controls.sector, controls.year, controls.satellite, dataRoot]);
+
+  const maxTifUrl = useMemo(() => {
+    if (!baseData?.manifest || !isGridMode) return null;
+    const entry = getManifestEntry(
+      baseData.manifest, controls.sector, controls.year, controls.satellite,
+    );
+    return entry?.maxTif ? resolveTifUrl(dataRoot ?? '', entry.maxTif) : null;
+  }, [baseData?.manifest, controls.sector, controls.year, controls.satellite, dataRoot]);
+
+  const minGeoraster = useGeoraster(minTifUrl);
+  const maxGeoraster = useGeoraster(maxTifUrl);
+
   // ── JSON grid file path (Colombia grid mode) ──────────────────────────────
   const jsonGridFilePath = useMemo(() => {
     if (!isGridMode || activeDataset.gridType !== 'json') return null;
@@ -660,6 +714,8 @@ export function MapView() {
         {isGridMode && !activeDataset.gridType && (
           <GridHoverLayer
             georaster={activeGeoRaster}
+            minGeoraster={minGeoraster}
+            maxGeoraster={maxGeoraster}
             units={display.legendUnits ?? display.units}
           />
         )}

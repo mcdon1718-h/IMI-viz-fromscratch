@@ -180,6 +180,12 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
   margin-left: .15rem;
 }
 
+.grid-hover-spread {
+  font-weight: 400;
+  color:       var(--text-muted);
+  font-size:   .7rem;
+}
+
 /* Controls */
 .control-panel        { display: flex; flex-direction: column; gap: .9rem; }
 .control-panel-title  { font-size: .68rem; text-transform: uppercase;
