@@ -232,11 +232,33 @@ function useGeoraster(url) {
   return georaster;
 }
 
+// ─── useJsonMinMax (fetch only, Colombia hover uncertainty) ───────────────────
+// Each uncertainty file holds a single { min: [...], max: [...] } pair of flat
+// arrays aligned with gridMeta -- one fetch backs both bounds of the tooltip.
+
+function useJsonMinMax(url) {
+  const [minMax, setMinMax] = useState(null);
+
+  useEffect(() => {
+    if (!url) { setMinMax(null); return undefined; }
+    let cancelled = false;
+    fetch(url)
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status} — ${url}`); return r.json(); })
+      .then(data => { if (!cancelled) setMinMax({ min: data.min ?? null, max: data.max ?? null }); })
+      .catch(err => { if (!cancelled) console.error('[useJsonMinMax] load error:', err.message); });
+    return () => { cancelled = true; };
+  }, [url]);
+
+  return minMax;
+}
+
 // ─── JsonGridHoverLayer ───────────────────────────────────────────────────────
 // Same portal tooltip as GridHoverLayer but uses the flat JSON values array
 // instead of a parsed georaster (the polygon layer is non-interactive).
 
-function JsonGridHoverLayer({ gridMeta, values, units }) {
+function JsonGridHoverLayer({
+  gridMeta, values, minValues, maxValues, units,
+}) {
   const map = useMap();
   const [hover, setHover] = useState(null);
 
@@ -244,7 +266,10 @@ function JsonGridHoverLayer({ gridMeta, values, units }) {
     mousemove(e) {
       if (!gridMeta || !values) { setHover(null); return; }
       const val = getValueAtLatLngFromGrid(gridMeta, values, e.latlng.lat, e.latlng.lng);
-      setHover(val != null ? { point: e.containerPoint, value: val } : null);
+      if (val == null) { setHover(null); return; }
+      const min = minValues ? getValueAtLatLngFromGrid(gridMeta, minValues, e.latlng.lat, e.latlng.lng) : null;
+      const max = maxValues ? getValueAtLatLngFromGrid(gridMeta, maxValues, e.latlng.lat, e.latlng.lng) : null;
+      setHover({ point: e.containerPoint, value: val, min, max });
     },
     mouseout()  { setHover(null); },
     dragstart() { setHover(null); },
@@ -252,12 +277,19 @@ function JsonGridHoverLayer({ gridMeta, values, units }) {
 
   if (!hover) return null;
 
+  // Ensemble min/max only exist for sectors/years with uncertainty coverage --
+  // when either is unavailable the tooltip falls back to the central value alone.
+  const spread = (hover.min != null && hover.max != null)
+    ? (hover.max - hover.min) / 2
+    : null;
+
   return createPortal(
     <div
       className="grid-hover-tooltip"
       style={{ left: hover.point.x + 14, top: hover.point.y }}
     >
       {hover.value.toFixed(3)}
+      {spread != null && <span className="grid-hover-spread"> ± {spread.toFixed(3)}</span>}
       {units && <span className="grid-hover-units"> {units}</span>}
     </div>,
     map.getContainer(),
@@ -633,6 +665,14 @@ export function MapView() {
     return baseData?.gridFiles?.[controls.year]?.[controls.sector] ?? null;
   }, [isGridMode, activeDataset.gridType, baseData, controls.year, controls.sector]);
 
+  // ── JSON grid uncertainty file path (posterior hover uncertainty, Colombia) ─
+  const jsonUncertaintyFilePath = useMemo(() => {
+    if (!isGridMode || activeDataset.gridType !== 'json') return null;
+    return baseData?.gridUncertaintyFiles?.[controls.year]?.[controls.sector] ?? null;
+  }, [isGridMode, activeDataset.gridType, baseData, controls.year, controls.sector]);
+
+  const jsonMinMax = useJsonMinMax(jsonUncertaintyFilePath);
+
   // ── Raster/grid domain ────────────────────────────────────────────────────
   const rasterDomain = useMemo(() => {
     if (!isGridMode) return { min: 0, max: 1 };
@@ -767,6 +807,8 @@ export function MapView() {
           <JsonGridHoverLayer
             gridMeta={baseData?.gridMeta}
             values={activeJsonGridValues}
+            minValues={jsonMinMax?.min}
+            maxValues={jsonMinMax?.max}
             units={display.legendUnits ?? display.units}
           />
         )}
