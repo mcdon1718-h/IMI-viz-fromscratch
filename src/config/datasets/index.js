@@ -8,4 +8,6 @@ import './ch4/colombia';
 import './co2/usa'
 import './co2/global'
 
+import './upload/custom';
+
 //import './co2/usa'; <- future import

@@ -10,7 +10,7 @@ const ControlRenderers = {
 };
 
 export function ControlPanel() {
-  const { activeDataset, controls, setControl, selectedState } = useDatasetContext();
+  const { activeDataset, controls, setControl, selectedState, uploadedData } = useDatasetContext();
   const { data: baseData } = useEmissionData();
 
   // Resolve visibility and options for every control up front
@@ -22,7 +22,7 @@ export function ControlPanel() {
 
       let options = def.options;
       if (typeof options === 'function') options = options(controls);
-      if (def.getOptions) options = def.getOptions(baseData);
+      if (def.getOptions) options = def.getOptions(baseData, { uploadedData });
       if (!options || options.length === 0) return null;
 
       return { ...def, options };

@@ -25,6 +25,7 @@ import {
   centralCol,
   parseNumber,
 } from '../utils/emissionsUtils';
+import { rasterMax } from '../utils/gridStats';
 
 // ─── Color utilities ──────────────────────────────────────────────────────────
 
@@ -298,7 +299,9 @@ function JsonGridHoverLayer({
 
 // ─── RasterLayer (TIF / CONUS) ────────────────────────────────────────────────
 
-function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity, onGeoRasterReady }) {
+function RasterLayer({
+  tifUrl, domainMin, domainMax, colorStops, opacity, onGeoRasterReady, onRawMaxReady,
+}) {
   const map = useMap();
   const [georaster, setGeoraster] = useState(null);
   const layerRef = useRef(null);
@@ -310,9 +313,14 @@ function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity, onGeoR
     fetch(tifUrl)
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status} — ${tifUrl}`); return r.arrayBuffer(); })
       .then(buf  => parseGeoraster(buf))
-      .then(gr   => { if (!cancelled) { setGeoraster(gr); onGeoRasterReady?.(gr); } })
+      .then(gr   => {
+        if (cancelled) return;
+        setGeoraster(gr);
+        onGeoRasterReady?.(gr);
+        onRawMaxReady?.(rasterMax(gr));
+      })
       .catch(err => { if (!cancelled) console.error('[RasterLayer] load error:', err.message); });
-    return () => { cancelled = true; onGeoRasterReady?.(null); };
+    return () => { cancelled = true; onGeoRasterReady?.(null); onRawMaxReady?.(null); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tifUrl]);
 
@@ -609,6 +617,7 @@ export function MapView() {
     setSelectedState,
     jsonGridDomain,
     setJsonGridDomain,
+    uploadedData,
   } = useDatasetContext();
 
   const { data: baseData, loading, error } = useEmissionData();
@@ -619,6 +628,11 @@ export function MapView() {
 
   const [activeGeoRaster, setActiveGeoRaster] = useState(null);
   const [activeJsonGridValues, setActiveJsonGridValues] = useState(null);
+
+  // ── Active uploaded sector (upload dataset only) ──────────────────────────
+  const activeUploadSector = activeDataset.gridType === 'upload'
+    ? uploadedData?.sectors?.[controls.sector] ?? null
+    : null;
 
   // Clear the JSON grid domain when any grid-affecting control changes
   useEffect(() => {
@@ -676,17 +690,18 @@ export function MapView() {
   // ── Raster/grid domain ────────────────────────────────────────────────────
   const rasterDomain = useMemo(() => {
     if (!isGridMode) return { min: 0, max: 1 };
+    const scaleMax = controls.maxEmission ?? controls.colorScaleMax ?? 1.0;
     if (baseData?.manifest) {
       const g = getGlobalDomain(baseData.manifest, controls.sector);
-      return { min: 0, max: g.max * (controls.maxEmission ?? 1.0) };
+      return { min: 0, max: g.max * scaleMax };
     }
     if (jsonGridDomain != null) {
-      return { min: 0, max: jsonGridDomain.max * (controls.maxEmission ?? 1.0) };
+      return { min: 0, max: jsonGridDomain.max * scaleMax };
     }
     return { min: 0, max: 1 };
   }, [
     controls.viewMode, baseData?.manifest, controls.sector,
-    controls.maxEmission, jsonGridDomain,
+    controls.maxEmission, controls.colorScaleMax, jsonGridDomain,
   ]);
 
   // ── Choropleth domain ─────────────────────────────────────────────────────
@@ -725,7 +740,7 @@ export function MapView() {
       {!loading && error && (
         <div className="map-overlay error">Error: {error}</div>
       )}
-      {!loading && !error && !selectedState && (
+      {!loading && !error && !selectedState && baseData?.statesGeoJSON && (
         <div className="map-overlay hint">Click a region to view regional data</div>
       )}
 
@@ -810,6 +825,55 @@ export function MapView() {
             minValues={jsonMinMax?.min}
             maxValues={jsonMinMax?.max}
             units={display.legendUnits ?? display.units}
+          />
+        )}
+
+        {/* Uploaded raster (TIF) */}
+        {isGridMode && activeDataset.gridType === 'upload' && uploadedData?.kind === 'tif' && activeUploadSector && (
+          <RasterLayer
+            key={activeUploadSector.url}
+            tifUrl={activeUploadSector.url}
+            domainMin={rasterDomain.min}
+            domainMax={rasterDomain.max}
+            colorStops={colorStops}
+            opacity={controls.opacity ?? 0.7}
+            onGeoRasterReady={setActiveGeoRaster}
+            onRawMaxReady={(max) =>
+              setJsonGridDomain(max != null ? { min: 0, max } : null)
+            }
+          />
+        )}
+
+        {/* Uploaded raster hover tooltip */}
+        {isGridMode && activeDataset.gridType === 'upload' && uploadedData?.kind === 'tif' && (
+          <GridHoverLayer
+            georaster={activeGeoRaster}
+            units={uploadedData.meta?.units || (display.legendUnits ?? display.units)}
+          />
+        )}
+
+        {/* Uploaded JSON polygon grid */}
+        {isGridMode && activeDataset.gridType === 'upload' && uploadedData?.kind === 'json' && activeUploadSector && (
+          <JsonGridLayer
+            key={activeUploadSector.url}
+            gridMeta={activeUploadSector.gridMeta}
+            filePath={activeUploadSector.url}
+            domainMax={rasterDomain.max}
+            colorStops={colorStops}
+            opacity={controls.opacity ?? 0.7}
+            onRawMaxReady={(max) =>
+              setJsonGridDomain(max != null ? { min: 0, max } : null)
+            }
+            onValuesReady={setActiveJsonGridValues}
+          />
+        )}
+
+        {/* Uploaded JSON grid hover tooltip */}
+        {isGridMode && activeDataset.gridType === 'upload' && uploadedData?.kind === 'json' && (
+          <JsonGridHoverLayer
+            gridMeta={activeUploadSector?.gridMeta}
+            values={activeJsonGridValues}
+            units={uploadedData.meta?.units || (display.legendUnits ?? display.units)}
           />
         )}
 

@@ -90,21 +90,36 @@ export function DatasetProvider({ initialFamilyId, initialDatasetId, children })
   // ── JSON grid domain (reported by JsonGridLayer, consumed by Legend) ──────
   const [jsonGridDomain, setJsonGridDomain] = useState(null);
 
+  // ── Uploaded files (session-only, reported by UploadPanel) ────────────────
+  // Shape: { kind: 'tif'|'json', sectors: { [name]: {url, gridMeta, size} }, meta: {name, units} }
+  const [uploadedData, setUploadedData] = useState(null);
+
   const setSelectedState = useCallback((stateName) => {
     setSelectedStateRaw(stateName);
+  }, []);
+
+  const clearUploadedData = useCallback(() => {
+    setUploadedData(prev => {
+      for (const s of Object.values(prev?.sectors ?? {})) {
+        if (s?.url) URL.revokeObjectURL(s.url);
+      }
+      return null;
+    });
   }, []);
 
   const setActiveFamily = useCallback((id) => {
     dispatch({ type: 'SET_FAMILY', id });
     setSelectedStateRaw(null);
     setJsonGridDomain(null);
-  }, []);
+    clearUploadedData();
+  }, [clearUploadedData]);
 
   const setActiveDataset = useCallback((id) => {
     dispatch({ type: 'SET_DATASET', id });
     setSelectedStateRaw(null);
     setJsonGridDomain(null);
-  }, []);
+    clearUploadedData();
+  }, [clearUploadedData]);
 
   const setControl = useCallback((key, value) => {
     dispatch({ type: 'SET_CONTROL', key, value });
@@ -125,9 +140,13 @@ export function DatasetProvider({ initialFamilyId, initialDatasetId, children })
     setSelectedState,
     jsonGridDomain,
     setJsonGridDomain,
+    uploadedData,
+    setUploadedData,
+    clearUploadedData,
   }), [
-    state, allFamilies, selectedState, jsonGridDomain,
+    state, allFamilies, selectedState, jsonGridDomain, uploadedData,
     setActiveFamily, setActiveDataset, setControl, setSelectedState,
+    setUploadedData, clearUploadedData,
   ]);
 
   return (
