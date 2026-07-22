@@ -70,12 +70,13 @@ function buildPixelColorFn(domainMin, domainMax, stops) {
 }
 
 // ─── Feature name helper ──────────────────────────────────────────────────────
-// Handles US state GeoJSON (name / NAME / NAME_1) and Colombia province GeoJSON
-// (PROVINCE / province) with a single priority-ordered lookup.
+// Handles US state GeoJSON (name / NAME / NAME_1), Colombia province GeoJSON
+// (PROVINCE / province), and Natural Earth world-countries GeoJSON (ADMIN)
+// with a single priority-ordered lookup.
 
 function getFeatureName(feature) {
   const p = feature?.properties ?? {};
-  return p.name ?? p.NAME ?? p.NAME_1 ?? p.PROVINCE ?? p.province ?? '';
+  return p.ADMIN ?? p.name ?? p.NAME ?? p.NAME_1 ?? p.PROVINCE ?? p.province ?? '';
 }
 
 // ─── Grid value lookup (TIF) ──────────────────────────────────────────────────

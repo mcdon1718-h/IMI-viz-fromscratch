@@ -18,6 +18,10 @@ export const SECTOR_LABELS = {
   OilGas:            'Oil/Gas',
   Waste:             'Waste',
   Other:             'Other',
+  // Global (ch4-global) sector keys
+  OtherAnth:         'Other',
+  BiomassBurn:       'Biomass Burn.',
+  OilAndGas:         'Oil & Gas',
 };
 
 // ─── CSV fetch ────────────────────────────────────────────────────────────────
