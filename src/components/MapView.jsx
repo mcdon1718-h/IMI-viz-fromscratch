@@ -25,6 +25,7 @@ import {
   centralCol,
   parseNumber,
 } from '../utils/emissionsUtils';
+import { rasterMax } from '../utils/gridStats';
 
 // ─── Color utilities ──────────────────────────────────────────────────────────
 
@@ -69,12 +70,13 @@ function buildPixelColorFn(domainMin, domainMax, stops) {
 }
 
 // ─── Feature name helper ──────────────────────────────────────────────────────
-// Handles US state GeoJSON (name / NAME / NAME_1) and Colombia province GeoJSON
-// (PROVINCE / province) with a single priority-ordered lookup.
+// Handles US state GeoJSON (name / NAME / NAME_1), Colombia province GeoJSON
+// (PROVINCE / province), and Natural Earth world-countries GeoJSON (ADMIN)
+// with a single priority-ordered lookup.
 
 function getFeatureName(feature) {
   const p = feature?.properties ?? {};
-  return p.name ?? p.NAME ?? p.NAME_1 ?? p.PROVINCE ?? p.province ?? '';
+  return p.ADMIN ?? p.name ?? p.NAME ?? p.NAME_1 ?? p.PROVINCE ?? p.province ?? '';
 }
 
 // ─── Grid value lookup (TIF) ──────────────────────────────────────────────────
@@ -232,11 +234,33 @@ function useGeoraster(url) {
   return georaster;
 }
 
+// ─── useJsonMinMax (fetch only, Colombia hover uncertainty) ───────────────────
+// Each uncertainty file holds a single { min: [...], max: [...] } pair of flat
+// arrays aligned with gridMeta -- one fetch backs both bounds of the tooltip.
+
+function useJsonMinMax(url) {
+  const [minMax, setMinMax] = useState(null);
+
+  useEffect(() => {
+    if (!url) { setMinMax(null); return undefined; }
+    let cancelled = false;
+    fetch(url)
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status} — ${url}`); return r.json(); })
+      .then(data => { if (!cancelled) setMinMax({ min: data.min ?? null, max: data.max ?? null }); })
+      .catch(err => { if (!cancelled) console.error('[useJsonMinMax] load error:', err.message); });
+    return () => { cancelled = true; };
+  }, [url]);
+
+  return minMax;
+}
+
 // ─── JsonGridHoverLayer ───────────────────────────────────────────────────────
 // Same portal tooltip as GridHoverLayer but uses the flat JSON values array
 // instead of a parsed georaster (the polygon layer is non-interactive).
 
-function JsonGridHoverLayer({ gridMeta, values, units }) {
+function JsonGridHoverLayer({
+  gridMeta, values, minValues, maxValues, units,
+}) {
   const map = useMap();
   const [hover, setHover] = useState(null);
 
@@ -244,7 +268,10 @@ function JsonGridHoverLayer({ gridMeta, values, units }) {
     mousemove(e) {
       if (!gridMeta || !values) { setHover(null); return; }
       const val = getValueAtLatLngFromGrid(gridMeta, values, e.latlng.lat, e.latlng.lng);
-      setHover(val != null ? { point: e.containerPoint, value: val } : null);
+      if (val == null) { setHover(null); return; }
+      const min = minValues ? getValueAtLatLngFromGrid(gridMeta, minValues, e.latlng.lat, e.latlng.lng) : null;
+      const max = maxValues ? getValueAtLatLngFromGrid(gridMeta, maxValues, e.latlng.lat, e.latlng.lng) : null;
+      setHover({ point: e.containerPoint, value: val, min, max });
     },
     mouseout()  { setHover(null); },
     dragstart() { setHover(null); },
@@ -252,12 +279,19 @@ function JsonGridHoverLayer({ gridMeta, values, units }) {
 
   if (!hover) return null;
 
+  // Ensemble min/max only exist for sectors/years with uncertainty coverage --
+  // when either is unavailable the tooltip falls back to the central value alone.
+  const spread = (hover.min != null && hover.max != null)
+    ? (hover.max - hover.min) / 2
+    : null;
+
   return createPortal(
     <div
       className="grid-hover-tooltip"
       style={{ left: hover.point.x + 14, top: hover.point.y }}
     >
       {hover.value.toFixed(3)}
+      {spread != null && <span className="grid-hover-spread"> ± {spread.toFixed(3)}</span>}
       {units && <span className="grid-hover-units"> {units}</span>}
     </div>,
     map.getContainer(),
@@ -266,7 +300,9 @@ function JsonGridHoverLayer({ gridMeta, values, units }) {
 
 // ─── RasterLayer (TIF / CONUS) ────────────────────────────────────────────────
 
-function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity, onGeoRasterReady }) {
+function RasterLayer({
+  tifUrl, domainMin, domainMax, colorStops, opacity, onGeoRasterReady, onRawMaxReady,
+}) {
   const map = useMap();
   const [georaster, setGeoraster] = useState(null);
   const layerRef = useRef(null);
@@ -278,9 +314,14 @@ function RasterLayer({ tifUrl, domainMin, domainMax, colorStops, opacity, onGeoR
     fetch(tifUrl)
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status} — ${tifUrl}`); return r.arrayBuffer(); })
       .then(buf  => parseGeoraster(buf))
-      .then(gr   => { if (!cancelled) { setGeoraster(gr); onGeoRasterReady?.(gr); } })
+      .then(gr   => {
+        if (cancelled) return;
+        setGeoraster(gr);
+        onGeoRasterReady?.(gr);
+        onRawMaxReady?.(rasterMax(gr));
+      })
       .catch(err => { if (!cancelled) console.error('[RasterLayer] load error:', err.message); });
-    return () => { cancelled = true; onGeoRasterReady?.(null); };
+    return () => { cancelled = true; onGeoRasterReady?.(null); onRawMaxReady?.(null); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tifUrl]);
 
@@ -577,6 +618,7 @@ export function MapView() {
     setSelectedState,
     jsonGridDomain,
     setJsonGridDomain,
+    uploadedData,
   } = useDatasetContext();
 
   const { data: baseData, loading, error } = useEmissionData();
@@ -587,6 +629,11 @@ export function MapView() {
 
   const [activeGeoRaster, setActiveGeoRaster] = useState(null);
   const [activeJsonGridValues, setActiveJsonGridValues] = useState(null);
+
+  // ── Active uploaded sector (upload dataset only) ──────────────────────────
+  const activeUploadSector = activeDataset.gridType === 'upload'
+    ? uploadedData?.sectors?.[controls.sector] ?? null
+    : null;
 
   // Clear the JSON grid domain when any grid-affecting control changes
   useEffect(() => {
@@ -633,20 +680,29 @@ export function MapView() {
     return baseData?.gridFiles?.[controls.year]?.[controls.sector] ?? null;
   }, [isGridMode, activeDataset.gridType, baseData, controls.year, controls.sector]);
 
+  // ── JSON grid uncertainty file path (posterior hover uncertainty, Colombia) ─
+  const jsonUncertaintyFilePath = useMemo(() => {
+    if (!isGridMode || activeDataset.gridType !== 'json') return null;
+    return baseData?.gridUncertaintyFiles?.[controls.year]?.[controls.sector] ?? null;
+  }, [isGridMode, activeDataset.gridType, baseData, controls.year, controls.sector]);
+
+  const jsonMinMax = useJsonMinMax(jsonUncertaintyFilePath);
+
   // ── Raster/grid domain ────────────────────────────────────────────────────
   const rasterDomain = useMemo(() => {
     if (!isGridMode) return { min: 0, max: 1 };
+    const scaleMax = controls.maxEmission ?? controls.colorScaleMax ?? 1.0;
     if (baseData?.manifest) {
       const g = getGlobalDomain(baseData.manifest, controls.sector);
-      return { min: 0, max: g.max * (controls.maxEmission ?? 1.0) };
+      return { min: 0, max: g.max * scaleMax };
     }
     if (jsonGridDomain != null) {
-      return { min: 0, max: jsonGridDomain.max * (controls.maxEmission ?? 1.0) };
+      return { min: 0, max: jsonGridDomain.max * scaleMax };
     }
     return { min: 0, max: 1 };
   }, [
     controls.viewMode, baseData?.manifest, controls.sector,
-    controls.maxEmission, jsonGridDomain,
+    controls.maxEmission, controls.colorScaleMax, jsonGridDomain,
   ]);
 
   // ── Choropleth domain ─────────────────────────────────────────────────────
@@ -685,7 +741,7 @@ export function MapView() {
       {!loading && error && (
         <div className="map-overlay error">Error: {error}</div>
       )}
-      {!loading && !error && !selectedState && (
+      {!loading && !error && !selectedState && baseData?.statesGeoJSON && (
         <div className="map-overlay hint">Click a region to view regional data</div>
       )}
 
@@ -767,7 +823,58 @@ export function MapView() {
           <JsonGridHoverLayer
             gridMeta={baseData?.gridMeta}
             values={activeJsonGridValues}
+            minValues={jsonMinMax?.min}
+            maxValues={jsonMinMax?.max}
             units={display.legendUnits ?? display.units}
+          />
+        )}
+
+        {/* Uploaded raster (TIF) */}
+        {isGridMode && activeDataset.gridType === 'upload' && uploadedData?.kind === 'tif' && activeUploadSector && (
+          <RasterLayer
+            key={activeUploadSector.url}
+            tifUrl={activeUploadSector.url}
+            domainMin={rasterDomain.min}
+            domainMax={rasterDomain.max}
+            colorStops={colorStops}
+            opacity={controls.opacity ?? 0.7}
+            onGeoRasterReady={setActiveGeoRaster}
+            onRawMaxReady={(max) =>
+              setJsonGridDomain(max != null ? { min: 0, max } : null)
+            }
+          />
+        )}
+
+        {/* Uploaded raster hover tooltip */}
+        {isGridMode && activeDataset.gridType === 'upload' && uploadedData?.kind === 'tif' && (
+          <GridHoverLayer
+            georaster={activeGeoRaster}
+            units={uploadedData.meta?.units || (display.legendUnits ?? display.units)}
+          />
+        )}
+
+        {/* Uploaded JSON polygon grid */}
+        {isGridMode && activeDataset.gridType === 'upload' && uploadedData?.kind === 'json' && activeUploadSector && (
+          <JsonGridLayer
+            key={activeUploadSector.url}
+            gridMeta={activeUploadSector.gridMeta}
+            filePath={activeUploadSector.url}
+            domainMax={rasterDomain.max}
+            colorStops={colorStops}
+            opacity={controls.opacity ?? 0.7}
+            onRawMaxReady={(max) =>
+              setJsonGridDomain(max != null ? { min: 0, max } : null)
+            }
+            onValuesReady={setActiveJsonGridValues}
+          />
+        )}
+
+        {/* Uploaded JSON grid hover tooltip */}
+        {isGridMode && activeDataset.gridType === 'upload' && uploadedData?.kind === 'json' && (
+          <JsonGridHoverLayer
+            gridMeta={activeUploadSector?.gridMeta}
+            values={activeJsonGridValues}
+            units={uploadedData.meta?.units || (display.legendUnits ?? display.units)}
           />
         )}
 

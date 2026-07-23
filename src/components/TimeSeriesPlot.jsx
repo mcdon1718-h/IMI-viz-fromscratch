@@ -73,12 +73,14 @@ function TimeSeriesCustomTooltip({ active, payload, label, units, accent }) {
   );
 }
 
+const SUPPORTED = new Set(['ch4-conus', 'ch4-colombia']);
+
 export function TimeSeriesPlot() {
   const { activeDataset, activeFamily, controls, selectedState } = useDatasetContext();
   const { data: baseData } = useEmissionData();
 
   const years = activeYears(controls.satellite);
-  if (years.length < 2 || !baseData) return null;
+  if (!SUPPORTED.has(activeDataset.id) || years.length < 2 || !baseData) return null;
 
   const mode       = selectedState ? 'state' : 'national';
   const placeLabel = selectedState ?? 'National';

@@ -190,6 +190,18 @@ registerDataset({
       }
     }
 
+    // ── Grid uncertainty file paths (per-pixel posterior min/max) ────────
+    // Naming convention: grid/uncertainty/columbia_gridded_unc/<Sector>_posterior_uncertainty_<Year>.json
+    // Each file holds { min: [...], max: [...] } flat arrays aligned with gridMeta.
+    const UNCERTAINTY_DIR = `${DATA_ROOT}/grid/uncertainty/columbia_gridded_unc`;
+    const gridUncertaintyFiles = {};
+    for (const yr of years) {
+      gridUncertaintyFiles[yr] = {};
+      for (const opt of SECTOR_OPTIONS) {
+        gridUncertaintyFiles[yr][opt.value] = `${UNCERTAINTY_DIR}/${opt.value}_posterior_uncertainty_${yr}.json`;
+      }
+    }
+
     return {
       byYear,
       nationalPosterior,
@@ -199,6 +211,7 @@ registerDataset({
       statesGeoJSON:    provinceGeoJSON,
       gridMeta:         chartData.grid ?? null,
       gridFiles,
+      gridUncertaintyFiles,
       manifest:         null,
     };
   },

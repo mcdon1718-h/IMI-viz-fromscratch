@@ -4,13 +4,18 @@ import { FamilySelector }   from './FamilySelector';
 import { DatasetSelector }  from './DatasetSelector';
 import { ControlPanel }     from './ControlPanel';
 import { DataTotals }       from './DataTotals';
+import { UploadPanel }      from './UploadPanel';
 import { MapView }          from './MapView';
 import { Legend }           from './Legend';
 import { SectorBarChart }   from './SectorBarChart';
 import { TimeSeriesPlot }   from './TimeSeriesPlot';
 
 export function Dashboard() {
-  const { activeDataset, activeFamily } = useDatasetContext();
+  const { activeDataset, activeFamily, datasetsInActiveFamily, uploadedData } = useDatasetContext();
+
+  const datasetTitle = activeDataset.id === 'user-upload'
+    ? (uploadedData?.meta?.name || activeDataset.name)
+    : activeDataset.name;
 
   return (
     <div className="dashboard" data-family={activeFamily.id}>
@@ -29,20 +34,23 @@ export function Dashboard() {
       <div className="dashboard-body">
         <aside className="dashboard-sidebar">
 
-          {/* Family badge + region selector on the same row */}
-          <div className="sidebar-badge-row">
-            <span className="dataset-family-badge">{activeFamily.label}</span>
-            <DatasetSelector />
-          </div>
+          <span className="dataset-family-badge">{activeFamily.label}</span>
+
+          <p className="family-description">{activeFamily.description}</p>
+
+          {/* Only one dataset in this family (e.g. uploads) — nothing to switch between */}
+          {datasetsInActiveFamily.length > 1 && <DatasetSelector />}
 
           {/* Dataset title + description */}
           <div className="dataset-info">
-            <h2>{activeDataset.name}</h2>
+            <h2>{datasetTitle}</h2>
             <p>{activeDataset.description}</p>
           </div>
 
           {/* ── Emissions totals summary ──────────────────────────────── */}
           <DataTotals />
+
+          {activeDataset.id === 'user-upload' && <UploadPanel />}
 
           <ControlPanel />
           <Legend />

@@ -3,7 +3,7 @@ import { useDatasetContext } from '../context/DatasetContext';
 import { useEmissionData }   from '../hooks/useEmissionData';
 import { parseNumber }       from '../utils/emissionsUtils';
 
-const SUPPORTED = new Set(['ch4-conus', 'ch4-colombia']);
+const SUPPORTED = new Set(['ch4-conus', 'ch4-colombia', 'ch4-global']);
 
 export function DataTotals() {
   const { activeDataset, controls, selectedState } = useDatasetContext();
@@ -24,6 +24,31 @@ export function DataTotals() {
         : baseData.nationalPosterior?.[year];
       const v = parseNumber(isState ? row?.TotalAnth_posterior : row?.TotalAnth);
       return { totalBottomUp: null, anthroBottomUp: null, totalPost: v, anthroPost: v };
+    }
+
+    // ── Global (countries) ──────────────────────────────────────────────────
+    // Both prior and posterior are always available (unlike CONUS's
+    // years-limited bottom-up), so both are shown regardless of the
+    // Data Source control — that only drives the map's coloring.
+    if (activeDataset.id === 'ch4-global') {
+      if (!isState) {
+        const priorRow = baseData.nationalPrior?.[year];
+        const postRow  = baseData.nationalPosterior?.[year];
+        return {
+          totalBottomUp:  priorRow ? parseNumber(priorRow.Total)     : null,
+          anthroBottomUp: priorRow ? parseNumber(priorRow.TotalAnth) : null,
+          totalPost:      postRow  ? parseNumber(postRow.Total)      : null,
+          anthroPost:     postRow  ? parseNumber(postRow.TotalAnth)  : null,
+        };
+      }
+      const priorRow = baseData.stateByYearPrior?.[year]?.[selectedState];
+      const postRow  = baseData.byYear?.[year]?.[selectedState];
+      return {
+        totalBottomUp:  priorRow ? parseNumber(priorRow.Total)               : null,
+        anthroBottomUp: priorRow ? parseNumber(priorRow.TotalAnth)           : null,
+        totalPost:      postRow  ? parseNumber(postRow.Total_posterior)     : null,
+        anthroPost:     postRow  ? parseNumber(postRow.TotalAnth_posterior) : null,
+      };
     }
 
     // ── CONUS national ────────────────────────────────────────────────────────
@@ -88,7 +113,9 @@ export function DataTotals() {
 
   const placeLabel = selectedState
     ? selectedState.toUpperCase()
-    : activeDataset.id === 'ch4-colombia' ? 'COLOMBIA' : 'NATIONAL';
+    : activeDataset.id === 'ch4-colombia' ? 'COLOMBIA'
+    : activeDataset.id === 'ch4-global'   ? 'WORLD'
+    : 'NATIONAL';
 
   // Helper: render a number cell — accented if populated, dimmed if not
   function NumCell({ value }) {

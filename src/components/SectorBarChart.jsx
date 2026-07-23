@@ -23,6 +23,38 @@ const DIM_COLOR    = '#99a7b9';
 const BRIGHT_COLOR = '#e2e8f0';
 const TEAL_COLOR   = '#14b8a6';
 
+function UploadBarTooltip({ active, payload, label, units, accent }) {
+  if (!active || !payload?.length) return null;
+  const val = payload[0]?.value;
+
+  return (
+    <div style={{
+      background:   '#1a1d27',
+      border:       '1px solid #2d3148',
+      borderRadius: '6px',
+      padding:      '0.4rem 0.65rem',
+      fontSize:     '0.85rem',
+      lineHeight:   1.65,
+      minWidth:     '9rem',
+    }}>
+      <div style={{ color: accent, fontWeight: 700, marginBottom: '0.15rem' }}>
+        {label}
+      </div>
+      <div style={{ color: BRIGHT_COLOR, display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
+        <span>Total</span>
+        <span style={{ fontWeight: 600 }}>
+          {val != null ? Number(val).toFixed(3) : 'N/A'}
+          {units && (
+            <span style={{ opacity: 0.6, fontSize: '0.68rem', marginLeft: '0.2rem' }}>
+              {units}
+            </span>
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function SectorBarCustomTooltip({
   active, payload, label, units, accent, showUncertainty, showBottomUp,
 }) {
@@ -81,8 +113,64 @@ function SectorBarCustomTooltip({
 }
 
 export function SectorBarChart() {
-  const { activeDataset, activeFamily, controls, selectedState } = useDatasetContext();
+  const { activeDataset, activeFamily, controls, selectedState, uploadedData } = useDatasetContext();
   const { data: baseData, loading } = useEmissionData();
+
+  if (activeDataset.id === 'user-upload') {
+    const sectors    = uploadedData?.sectors ?? {};
+    const sectorKeys = Object.keys(sectors);
+    if (sectorKeys.length < 2) return null; // nothing to compare with only one sector
+
+    const accent = activeFamily.theme.accent;
+    const units  = uploadedData?.meta?.units || '';
+
+    const chartData = sectorKeys.map(key => ({
+      sector: key,
+      value:  sectors[key].sum ?? 0,
+    }));
+
+    return (
+      <div className="chart-panel">
+        <div className="chart-header">
+          <span className="chart-title">Sector Breakdown</span>
+          <span className="chart-units">{units}</span>
+        </div>
+
+        <ResponsiveContainer width="100%" height={320}>
+          <BarChart
+            layout="vertical"
+            data={chartData}
+            margin={{ top: 4, right: 12, left: 0, bottom: 4 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+            <XAxis
+              type="number"
+              tick={{ fill: '#94a3b8', fontSize: 13 }}
+              axisLine={{ stroke: '#2d3148' }}
+              tickLine={false}
+            />
+            <YAxis
+              type="category"
+              dataKey="sector"
+              tick={{ fill: '#94a3b8', fontSize: 14 }}
+              axisLine={false}
+              tickLine={false}
+              width={90}
+            />
+            <Tooltip
+              content={<UploadBarTooltip units={units} accent={accent} />}
+              cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+            />
+            <Bar dataKey="value" name="Total" radius={[0, 3, 3, 0]}>
+              {chartData.map((_, i) => (
+                <Cell key={i} fill={accent} fillOpacity={0.85} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
 
   if (!baseData) return null;
 
