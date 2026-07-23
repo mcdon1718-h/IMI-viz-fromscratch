@@ -138,6 +138,7 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
 
 .dataset-family-badge {
   display:          inline-block;
+  align-self:       flex-start;
   padding:          .15rem .45rem;
   border-radius:    4px;
   background:       var(--accent-dim);
@@ -149,9 +150,17 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
   margin-bottom:    .4rem;
 }
 
+.family-description {
+  font-size:      .73rem;
+  color:          var(--text-muted);
+  line-height:    1.5;
+  margin:         0 0 .6rem;
+  white-space:    pre-line;
+}
+
 /* Dataset info */
 .dataset-info h2      { font-size: 2.85rem; font-weight: 600; margin-bottom: .3rem; }
-.dataset-info p       { font-size: .73rem; color: var(--text-muted); line-height: 1.5; }
+.dataset-info p       { font-size: .73rem; color: var(--text-muted); line-height: 1.5; white-space: pre-line; }
 
 
 /* ── Grid cell hover tooltip ─────────────────────────────────────────────── */
@@ -180,6 +189,12 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
   margin-left: .15rem;
 }
 
+.grid-hover-spread {
+  font-weight: 400;
+  color:       var(--text-muted);
+  font-size:   .7rem;
+}
+
 /* Controls */
 .control-panel        { display: flex; flex-direction: column; gap: .9rem; }
 .control-panel-title  { font-size: .68rem; text-transform: uppercase;
@@ -200,6 +215,54 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
                         transition: all .1s; user-select: none; }
 .radio-option.active  { border-color: var(--accent); color: var(--accent); }
 .radio-option input   { accent-color: var(--accent); }
+
+/* ── UploadPanel ─────────────────────────────────────────────────────────── */
+.upload-panel        { display: flex; flex-direction: column; gap: .6rem;
+                        padding: .75rem; background: var(--bg-elevated);
+                        border-radius: 8px; border: 1px solid var(--border); }
+.upload-panel-title  { font-size: .68rem; text-transform: uppercase;
+                        letter-spacing: .08em; color: var(--text-muted); font-weight: 600; }
+.upload-field         { display: flex; flex-direction: column; gap: .3rem; }
+.upload-text-input,
+.upload-file-input    { width: 100%; background: var(--bg-elevated); border: 1px solid var(--border);
+                        color: var(--text-primary); padding: .35rem .5rem;
+                        border-radius: 6px; font-size: .78rem; box-sizing: border-box; }
+.upload-text-input:focus { outline: none; border-color: var(--accent); }
+.upload-file-input    { cursor: pointer; }
+.upload-hint          { font-size: .68rem; color: var(--text-muted); line-height: 1.5; margin: 0; }
+.upload-error         { font-size: .73rem; color: #f87171; background: rgba(248,113,113,0.1);
+                        border: 1px solid rgba(248,113,113,0.35); border-radius: 6px; padding: .4rem .5rem; }
+.upload-clear-btn      { background: var(--bg-elevated); border: 1px solid var(--border);
+                        color: var(--text-primary); padding: .25rem .6rem; border-radius: 6px;
+                        font-size: .73rem; cursor: pointer; align-self: flex-start; }
+.upload-clear-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.upload-usage          { display: flex; flex-direction: column; gap: .25rem; }
+.upload-usage-bar      { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08);
+                        overflow: hidden; }
+.upload-usage-fill     { height: 100%; background: var(--accent); border-radius: 3px;
+                        transition: width .2s ease; }
+.upload-usage-label    { font-size: .68rem; color: var(--text-muted); text-align: right; }
+
+.upload-subsection     { display: flex; flex-direction: column; gap: .35rem;
+                        padding: .55rem .6rem; border-radius: 6px;
+                        border: 1px dashed var(--border); }
+.upload-subsection-title { font-size: .68rem; text-transform: uppercase;
+                        letter-spacing: .06em; color: var(--text-muted); font-weight: 600; }
+
+.upload-sector-list    { display: flex; flex-direction: column; gap: .35rem; }
+.upload-sector-row     { display: flex; align-items: center; gap: .5rem;
+                        padding: .3rem .5rem; border-radius: 6px;
+                        background: var(--bg-elevated); border: 1px solid var(--border);
+                        font-size: .73rem; }
+.upload-sector-row.active { border-color: var(--accent); }
+.upload-sector-name    { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                        color: var(--text-primary); }
+.upload-sector-row.active .upload-sector-name { color: var(--accent); font-weight: 600; }
+.upload-sector-size    { color: var(--text-muted); font-size: .68rem; }
+.upload-sector-remove  { background: none; border: none; color: var(--text-muted);
+                        font-size: 1rem; line-height: 1; cursor: pointer; padding: 0 .15rem; }
+.upload-sector-remove:hover { color: #f87171; }
 
 /* Legend */
 .legend               { padding: .75rem; background: var(--bg-elevated);
