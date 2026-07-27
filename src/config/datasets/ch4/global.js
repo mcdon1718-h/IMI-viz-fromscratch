@@ -45,7 +45,8 @@ registerDataset({
   name:   'Global',
   description: 'Global anthropogenic methane emissions by country, derived from bottom-up inventories constrained with TROPOMI satellite observations. Data available for 2023 only.',
 
-  reloadTrigger: [], // load all data once on dataset mount
+  reloadTrigger: [],       // load all data once on dataset mount
+  gridType: 'country-mask', // signals MapView to overlay a per-country masked grid on click
 
   mapConfig: {
     initialViewState: { latitude: 20, longitude: 10, zoom: 2 },
@@ -81,11 +82,21 @@ registerDataset({
       options: [{ value: YEAR, label: String(YEAR) }],
       default: YEAR,
     },
+    {
+      key:     'opacity',
+      label:   'Grid Opacity',
+      type:    'slider',
+      options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+      default: 0.75,
+      format:  v => `${Math.round(v * 100)}%`,
+      visible: (controls, { selectedState }) => !!selectedState,
+    },
   ],
 
   display: {
     units:       'Tg/yr',
     legendTitle: 'CH₄ Emissions',
+    legendUnits: 'Tg/yr',
     colorScale: {
       stops: [
         [0,    '#ffffcc'],

@@ -5,7 +5,7 @@ registerFamily({
   name:        'Carbon Dioxide',
   label:       'CO₂',
   dashboardTitle: 'ICI Results Dashboard',        // ← add this
-  description: 'Carbon dioxide emissions from combustion, industry, and land-use change.',
+  description: 'Carbon dioxide emissions estimates derived from satellite remote sensing observations.',
   theme: {
     accent:     '#3b82f6',               // blue
     accentDim:  'rgba(59,130,246,0.15)',
