@@ -9,13 +9,16 @@ const GRADIENT = `linear-gradient(to right,
   #fd8d3c, #fc4e2a, #e31a1c, #bd0026, #800026)`;
 
 export function Legend() {
-  const { activeDataset, controls, jsonGridDomain, uploadedData } = useDatasetContext();
+  const { activeDataset, controls, selectedState, jsonGridDomain, uploadedData } = useDatasetContext();
   const { data: baseData }                          = useEmissionData();
   const { display }                                 = activeDataset;
   const isUpload = activeDataset.id === 'user-upload';
 
-  const isGrid       = controls.viewMode === 'grid';
-  const isChoropleth = !isGrid;
+  // ch4-global has no viewMode control — its "grid" is the masked per-country
+  // overlay, active only once a country is selected.
+  const isCountryGrid = activeDataset.gridType === 'country-mask' && !!selectedState;
+  const isGrid        = controls.viewMode === 'grid' || isCountryGrid;
+  const isChoropleth   = !isGrid;
 
   const rasterDomain = useMemo(() => {
   if (!isGrid) return null;

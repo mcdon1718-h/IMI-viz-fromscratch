@@ -5,7 +5,7 @@ registerFamily({
   name:        'Methane',
   label:       'CH₄',
   dashboardTitle: 'IMI Results Dashboard', 
-  description: 'Methane emissions derived from satellite remote sensing observations.',
+  description: 'Methane emissions estimates derived from satellite remote sensing observations.',
   theme: {
     accent:     '#f59e0b',               // amber
     accentDim:  'rgba(245,158,11,0.15)',

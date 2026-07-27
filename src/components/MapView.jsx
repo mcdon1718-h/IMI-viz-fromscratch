@@ -531,6 +531,109 @@ function JsonGridLayer({ gridMeta, filePath, domainMax, colorStops, opacity, onR
   return null;
 }
 
+// ─── CountryGridLayer (ch4-global masked per-country grid) ───────────────────
+// Each file is already a ready-made GeoJSON FeatureCollection of grid-cell
+// polygons (properties.emissions) clipped to one country — unlike the
+// Colombia grid, there's no shared lats/lons metadata to reconstruct cells
+// from, so this just draws the features as given. Rendered on a canvas
+// renderer (features can number in the thousands for large countries).
+
+function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady, onDeselect, onLoadingChange }) {
+  const map = useMap();
+  const layerRef = useRef(null);
+  const styleRef = useRef({ colorStops, opacity, domainMax: 1 });
+  styleRef.current.colorStops = colorStops;
+  styleRef.current.opacity = opacity;
+
+  const styleFeature = useCallback((feature) => {
+    const { colorStops: cs, opacity: op, domainMax: dm } = styleRef.current;
+    const v = feature.properties?.emissions;
+    const t = (v != null && dm > 0) ? Math.max(0, Math.min(1, v / dm)) : 0;
+    return { color: 'transparent', weight: 0, fillColor: stopsToColor(t, cs), fillOpacity: op };
+  }, []);
+
+  useEffect(() => {
+    if (!filePath) { onDomainReady?.(null); return undefined; }
+    let cancelled = false;
+    onLoadingChange?.(true);
+
+    fetch(filePath)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status} — ${filePath}`);
+        return r.json();
+      })
+      .then(data => {
+        if (cancelled) return;
+
+        const values = (data.features ?? [])
+          .map(f => f.properties?.emissions)
+          .filter(v => v != null && Number.isFinite(v));
+        const domainMax = values.length ? Math.max(...values) : 0;
+        styleRef.current.domainMax = domainMax || 1;
+
+        if (layerRef.current) {
+          try { map.removeLayer(layerRef.current); } catch (_) {}
+          layerRef.current = null;
+        }
+
+        try {
+          if (!map.getPane('countryGridPane')) {
+            map.createPane('countryGridPane');
+            const p = map.getPane('countryGridPane');
+            if (p) p.style.zIndex = '648';
+          }
+        } catch (_) {}
+
+        const layer = L.geoJSON(data, {
+          pane:     'countryGridPane',
+          renderer: L.canvas({ pane: 'countryGridPane' }),
+          style:    styleFeature,
+          onEachFeature: (feature, lyr) => {
+            const v = feature.properties?.emissions;
+            const label = v != null ? `${v.toFixed(5)}${units ? ` ${units}` : ''}` : 'N/A';
+            lyr.bindTooltip(label, { sticky: true });
+            // A tap anywhere on the grid re-toggles the country selection off,
+            // since the canvas layer otherwise blocks clicks reaching the
+            // choropleth polygon underneath it.
+            lyr.on('click', (e) => { e.originalEvent?.stopPropagation?.(); onDeselect?.(); });
+          },
+        });
+
+        try {
+          const bounds = layer.getBounds();
+          if (bounds.isValid()) map.fitBounds(bounds, { animate: true, duration: 0.5 });
+        } catch (_) {}
+
+        layer.addTo(map);
+        layerRef.current = layer;
+        onDomainReady?.(domainMax > 0 ? { min: 0, max: domainMax } : null);
+        onLoadingChange?.(false);
+      })
+      .catch(err => {
+        if (!cancelled) console.error('[CountryGridLayer]', err.message);
+        onDomainReady?.(null);
+        onLoadingChange?.(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (layerRef.current) {
+        try { map.removeLayer(layerRef.current); } catch (_) {}
+        layerRef.current = null;
+      }
+      onDomainReady?.(null);
+      onLoadingChange?.(false);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filePath, map]);
+
+  useEffect(() => {
+    if (layerRef.current) layerRef.current.setStyle(styleFeature);
+  }, [colorStops, opacity, styleFeature]);
+
+  return null;
+}
+
 // ─── ChoroplethLayer ──────────────────────────────────────────────────────────
 
 function ChoroplethLayer({ geojson, stateDataMap, colKey, domain, colorStops, onStateClick }) {
@@ -629,6 +732,7 @@ export function MapView() {
 
   const [activeGeoRaster, setActiveGeoRaster] = useState(null);
   const [activeJsonGridValues, setActiveJsonGridValues] = useState(null);
+  const [countryGridLoading, setCountryGridLoading] = useState(false);
 
   // ── Active uploaded sector (upload dataset only) ──────────────────────────
   const activeUploadSector = activeDataset.gridType === 'upload'
@@ -688,6 +792,12 @@ export function MapView() {
 
   const jsonMinMax = useJsonMinMax(jsonUncertaintyFilePath);
 
+  // ── Per-country masked grid file path (ch4-global) ────────────────────────
+  const countryGridFilePath = useMemo(() => {
+    if (activeDataset.gridType !== 'country-mask' || !selectedState) return null;
+    return `/data/ch4_global/country_emissions/${encodeURIComponent(selectedState.replace(/ /g, '_'))}_masked.json`;
+  }, [activeDataset.gridType, selectedState]);
+
   // ── Raster/grid domain ────────────────────────────────────────────────────
   const rasterDomain = useMemo(() => {
     if (!isGridMode) return { min: 0, max: 1 };
@@ -744,6 +854,9 @@ export function MapView() {
       {!loading && !error && !selectedState && baseData?.statesGeoJSON && (
         <div className="map-overlay hint">Click a region to view regional data</div>
       )}
+      {!loading && countryGridLoading && (
+        <div className="map-overlay loading">Loading country grid…</div>
+      )}
 
       {/*
         maxBounds / maxBoundsViscosity are intentionally omitted here —
@@ -786,6 +899,20 @@ export function MapView() {
             domain={choroplethDomain}
             colorStops={colorStops}
             onStateClick={handleStateClick}
+          />
+        )}
+
+        {/* Per-country masked grid (ch4-global) — overlays the choropleth on click */}
+        {activeDataset.gridType === 'country-mask' && countryGridFilePath && (
+          <CountryGridLayer
+            key={countryGridFilePath}
+            filePath={countryGridFilePath}
+            colorStops={colorStops}
+            opacity={controls.opacity ?? 0.75}
+            units={display.legendUnits ?? display.units}
+            onDomainReady={(d) => setJsonGridDomain(d)}
+            onLoadingChange={setCountryGridLoading}
+            onDeselect={() => setSelectedState(null)}
           />
         )}
 
