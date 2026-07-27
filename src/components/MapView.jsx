@@ -174,6 +174,10 @@ function MapController({ mapConfig }) {
 
 // ─── GridHoverLayer (TIF mode) ────────────────────────────────────────────────
 
+// Ensemble min/max TIFs are produced in kg/m²/s; the rest of the app works in
+// kg/km²/hr, so convert on read (1 km² = 1000² m², 1 hr = 3600 s).
+const KG_M2_S_TO_KG_KM2_HR = (1000 ** 2) * 60 * 60;
+
 function GridHoverLayer({ georaster, minGeoraster, maxGeoraster, units }) {
   const map = useMap();
   const [hover, setHover] = useState(null);
@@ -183,8 +187,10 @@ function GridHoverLayer({ georaster, minGeoraster, maxGeoraster, units }) {
       if (!georaster) { setHover(null); return; }
       const val = getValueAtLatLng(georaster, e.latlng.lat, e.latlng.lng);
       if (val == null) { setHover(null); return; }
-      const min = minGeoraster ? getValueAtLatLng(minGeoraster, e.latlng.lat, e.latlng.lng) : null;
-      const max = maxGeoraster ? getValueAtLatLng(maxGeoraster, e.latlng.lat, e.latlng.lng) : null;
+      const rawMin = minGeoraster ? getValueAtLatLng(minGeoraster, e.latlng.lat, e.latlng.lng) : null;
+      const rawMax = maxGeoraster ? getValueAtLatLng(maxGeoraster, e.latlng.lat, e.latlng.lng) : null;
+      const min = rawMin != null ? rawMin * KG_M2_S_TO_KG_KM2_HR : null;
+      const max = rawMax != null ? rawMax * KG_M2_S_TO_KG_KM2_HR : null;
       setHover({ point: e.containerPoint, value: val, min, max });
     },
     mouseout()  { setHover(null); },
