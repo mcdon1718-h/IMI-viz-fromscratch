@@ -112,8 +112,8 @@ registerDataset({
 
   async dataLoader() {
     const [rows, countriesGeoJSON] = await Promise.all([
-      fetchCSV('/data/emissions_data3.csv'),
-      fetch('/data/world-countries.json').then(r => {
+      fetchCSV(`${import.meta.env.BASE_URL}data/emissions_data3.csv`),
+      fetch(`${import.meta.env.BASE_URL}data/world-countries.json`).then(r => {
         if (!r.ok) throw new Error(`world-countries.json: HTTP ${r.status}`);
         return r.json();
       }),

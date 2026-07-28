@@ -1,7 +1,7 @@
 import { registerDataset } from '../../datasetRegistry';
 
 const ALL_YEARS  = [2019, 2020, 2021, 2022, 2023, 2024];
-const DATA_ROOT  = '/data/ch4_colombia';
+const DATA_ROOT  = `${import.meta.env.BASE_URL}data/ch4_colombia`;
 
 // Bar chart shows individual sectors; TotalAnth is the aggregate and is excluded
 const BAR_SECTOR_KEYS = ['Coal', 'OilGas', 'Livestock', 'Reservoirs', 'Rice', 'Waste', 'Other'];

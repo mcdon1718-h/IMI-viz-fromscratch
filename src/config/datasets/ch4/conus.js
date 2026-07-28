@@ -2,7 +2,7 @@ import { registerDataset }                     from '../../datasetRegistry';
 import { fetchCSV, deriveSectors, labelSector } from '../../../utils/emissionsUtils';
 
 const ALL_YEARS = [2019, 2020, 2021, 2022, 2023, 2024];
-const DATA_ROOT = '/data/ch4_conus';
+const DATA_ROOT = `${import.meta.env.BASE_URL}data/ch4_conus`;
 
 registerDataset({
   id:       'ch4-conus',
