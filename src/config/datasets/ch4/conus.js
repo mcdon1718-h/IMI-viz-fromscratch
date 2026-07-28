@@ -10,6 +10,8 @@ registerDataset({
   name:     'Contiguous USA',
   dataRoot: DATA_ROOT,
   description: 'Emissions are derived from the U.S. GHGI and TROPOMI satellite observations. See Estrada et al. (2026) for details.',
+  citation: { text: 'Estrada et al. (2026)', url: 'https://egusphere.copernicus.org/preprints/2026/egusphere-2026-655/' },
+  satellites: ['TROPOMI'],
 
   reloadTrigger: [],
 

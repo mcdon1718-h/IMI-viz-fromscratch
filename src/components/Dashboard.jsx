@@ -10,6 +10,21 @@ import { Legend }           from './Legend';
 import { SectorBarChart }   from './SectorBarChart';
 import { TimeSeriesPlot }   from './TimeSeriesPlot';
 
+// Splits a description on its citation text (e.g. "Hancock et al. (2026)")
+// and wraps that portion in a link, leaving the surrounding text untouched.
+function renderDescription(description, citation) {
+  if (!citation?.text) return description;
+  const idx = description.indexOf(citation.text);
+  if (idx === -1) return description;
+  return (
+    <>
+      {description.slice(0, idx)}
+      <a className="citation-link" href={citation.url} target="_blank" rel="noopener noreferrer">{citation.text}</a>
+      {description.slice(idx + citation.text.length)}
+    </>
+  );
+}
+
 export function Dashboard() {
   const { activeDataset, activeFamily, datasetsInActiveFamily, uploadedData } = useDatasetContext();
 
@@ -34,9 +49,12 @@ export function Dashboard() {
       <div className="dashboard-body">
         <aside className="dashboard-sidebar">
 
-          <span className="dataset-family-badge">{activeFamily.label}</span>
-
-          <p className="family-description">{activeFamily.description}</p>
+          <div className="dataset-badge-row">
+            <span className="dataset-family-badge">{activeFamily.label}</span>
+            {activeDataset.satellites?.map(sat => (
+              <span key={sat} className="satellite-badge">{sat}</span>
+            ))}
+          </div>
 
           {/* Only one dataset in this family (e.g. uploads) — nothing to switch between */}
           {datasetsInActiveFamily.length > 1 && <DatasetSelector />}
@@ -44,7 +62,7 @@ export function Dashboard() {
           {/* Dataset title + description */}
           <div className="dataset-info">
             <h2>{datasetTitle}</h2>
-            <p>{activeDataset.description}</p>
+            <p>{renderDescription(activeDataset.description, activeDataset.citation)}</p>
           </div>
 
           {/* ── Emissions totals summary ──────────────────────────────── */}

@@ -5,6 +5,7 @@ registerDataset({
   family: 'CO2',
   name:   'Continental USA',
   description: 'Column-averaged CO₂ concentrations over the continental United States.',
+  satellites: ['OCO-2', 'OCO-3', 'GOSAT'],
 
   mapConfig: {
   initialViewState: { latitude: 39.5, longitude: -98.5, zoom: 4 },

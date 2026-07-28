@@ -43,7 +43,9 @@ registerDataset({
   id:     'ch4-global',
   family: 'CH4',
   name:   'Global',
-  description: 'Global anthropogenic methane emissions by country, derived from bottom-up inventories constrained with TROPOMI satellite observations. Data available for 2023 only.',
+  description: 'Global anthropogenic methane emissions by country. Emissions estimates come from inversions of TROPOMI satellite methane observations. Data available for 2023 only. See East et al. (2025) for details.',
+  citation: { text: 'East et al. (2025)', url: 'https://www.nature.com/articles/s41467-025-67122-8' },
+  satellites: ['TROPOMI'],
 
   reloadTrigger: [],       // load all data once on dataset mount
   gridType: 'country-mask', // signals MapView to overlay a per-country masked grid on click

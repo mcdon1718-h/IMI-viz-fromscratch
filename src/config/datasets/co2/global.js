@@ -5,6 +5,7 @@ registerDataset({
   family: 'CO2',
   name:   'Global',
   description: 'Global column-averaged CO₂ concentrations from satellite observations.',
+  satellites: ['OCO-2', 'OCO-3', 'GOSAT', 'GOSAT-2'],
 
   mapConfig: {
   initialViewState: { latitude: 20, longitude: 10, zoom: 2 },

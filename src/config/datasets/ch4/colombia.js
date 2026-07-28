@@ -72,6 +72,8 @@ registerDataset({
   name:     'Colombia',
   dataRoot: DATA_ROOT,
   description: 'Anthropogenic methane emissions are derived from bottom-up inventories constrained with TROPOMI satellite observations. See Hancock et al. (2026) for more details.',
+  citation: { text: 'Hancock et al. (2026)', url: 'https://egusphere.copernicus.org/preprints/2026/egusphere-2025-5478/' },
+  satellites: ['TROPOMI', 'GOSAT'],
 
   reloadTrigger: [],   // load all data once on dataset mount
   gridType:      'json', // signals MapView to use JsonGridLayer instead of RasterLayer

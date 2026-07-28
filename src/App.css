@@ -134,11 +134,18 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
   letter-spacing: .05em;
 }
 
-/* ── Dataset family badge (sidebar) ─────────────────────────────────────────── */
+/* ── Dataset family + satellite badges (sidebar) ──────────────────────────────── */
+
+.dataset-badge-row {
+  display:          flex;
+  align-items:      center;
+  flex-wrap:        wrap;
+  gap:              .35rem;
+  margin-bottom:    .4rem;
+}
 
 .dataset-family-badge {
   display:          inline-block;
-  align-self:       flex-start;
   padding:          .15rem .45rem;
   border-radius:    4px;
   background:       var(--accent-dim);
@@ -147,20 +154,25 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
   font-size:        .85rem;
   font-weight:      700;
   letter-spacing:   .06em;
-  margin-bottom:    .4rem;
 }
 
-.family-description {
-  font-size:      .73rem;
-  color:          var(--text-muted);
-  line-height:    1.5;
-  margin:         0 0 .6rem;
-  white-space:    pre-line;
+.satellite-badge {
+  display:          inline-block;
+  padding:          .15rem .45rem;
+  border-radius:    4px;
+  background:       var(--bg-elevated);
+  border:           1px solid var(--border);
+  color:            var(--text-muted);
+  font-size:        .7rem;
+  font-weight:      600;
+  letter-spacing:   .04em;
 }
 
 /* Dataset info */
 .dataset-info h2      { font-size: 2.85rem; font-weight: 600; margin-bottom: .3rem; }
-.dataset-info p       { font-size: .73rem; color: var(--text-muted); line-height: 1.5; white-space: pre-line; }
+.dataset-info p       { font-size: .85rem; color: var(--text-muted); line-height: 1.5; white-space: pre-line; }
+.citation-link        { color: var(--accent); }
+.citation-link:hover  { text-decoration: underline; }
 
 
 /* ── Grid cell hover tooltip ─────────────────────────────────────────────── */
@@ -301,7 +313,7 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
 .dtc-spacer { /* empty cell — holds space under the row-label column */ }
 
 .dtc-header {
-  font-size:      .65rem;
+  font-size:      .70rem;
   font-weight:    600;
   text-transform: uppercase;
   letter-spacing: .07em;
@@ -310,7 +322,7 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
 }
 
 .dtc-label {
-  font-size:   .78rem;
+  font-size:   .85rem;
   color:       var(--text-muted);
   white-space: nowrap;
 }
@@ -332,7 +344,7 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
 }
 
 .dtc-units {
-  font-size:   .65rem;
+  font-size:   .70rem;
   font-weight: 400;
   color:       var(--text-muted);
   opacity:     0.85;
