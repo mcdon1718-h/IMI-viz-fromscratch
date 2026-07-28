@@ -81,7 +81,7 @@ function getFeatureName(feature) {
 
 // ─── Grid value lookup (TIF) ──────────────────────────────────────────────────
 
-function getValueAtLatLng(gr, lat, lng) {
+function getValueAtLatLng(gr, lat, lng, { allowZero = false } = {}) {
   if (!gr?.values) return null;
   const {
     xmin, xmax, ymin, ymax,
@@ -96,14 +96,14 @@ function getValueAtLatLng(gr, lat, lng) {
   const val = values[0]?.[row]?.[col];
   if (val == null)                                   return null;
   if (noDataValue != null && val === noDataValue)    return null;
-  if (!Number.isFinite(val) || val <= 0)             return null;
+  if (!Number.isFinite(val) || (!allowZero && val <= 0)) return null;
   return val;
 }
 
 // ─── Grid value lookup (JSON / Colombia) ──────────────────────────────────────
 // Nearest-neighbour search into the flat values array using the lat/lon metadata.
 
-function getValueAtLatLngFromGrid(gridMeta, values, lat, lng) {
+function getValueAtLatLngFromGrid(gridMeta, values, lat, lng, { allowZero = false } = {}) {
   if (!gridMeta?.lats?.length || !gridMeta?.lons?.length || !values?.length) return null;
 
   const { lats, lons } = gridMeta;
@@ -129,7 +129,7 @@ function getValueAtLatLngFromGrid(gridMeta, values, lat, lng) {
   if (minLonD > dlon / 2) return null;   // cursor outside grid
 
   const v = values[latIdx * nlon + lonIdx];
-  if (v == null || !Number.isFinite(v) || v <= 0) return null;
+  if (v == null || !Number.isFinite(v) || (!allowZero && v <= 0)) return null;
   return v;
 }
 
@@ -187,8 +187,8 @@ function GridHoverLayer({ georaster, minGeoraster, maxGeoraster, units }) {
       if (!georaster) { setHover(null); return; }
       const val = getValueAtLatLng(georaster, e.latlng.lat, e.latlng.lng);
       if (val == null) { setHover(null); return; }
-      const rawMin = minGeoraster ? getValueAtLatLng(minGeoraster, e.latlng.lat, e.latlng.lng) : null;
-      const rawMax = maxGeoraster ? getValueAtLatLng(maxGeoraster, e.latlng.lat, e.latlng.lng) : null;
+      const rawMin = minGeoraster ? getValueAtLatLng(minGeoraster, e.latlng.lat, e.latlng.lng, { allowZero: true }) : null;
+      const rawMax = maxGeoraster ? getValueAtLatLng(maxGeoraster, e.latlng.lat, e.latlng.lng, { allowZero: true }) : null;
       const min = rawMin != null ? rawMin * KG_M2_S_TO_KG_KM2_HR : null;
       const max = rawMax != null ? rawMax * KG_M2_S_TO_KG_KM2_HR : null;
       setHover({ point: e.containerPoint, value: val, min, max });
@@ -275,8 +275,8 @@ function JsonGridHoverLayer({
       if (!gridMeta || !values) { setHover(null); return; }
       const val = getValueAtLatLngFromGrid(gridMeta, values, e.latlng.lat, e.latlng.lng);
       if (val == null) { setHover(null); return; }
-      const min = minValues ? getValueAtLatLngFromGrid(gridMeta, minValues, e.latlng.lat, e.latlng.lng) : null;
-      const max = maxValues ? getValueAtLatLngFromGrid(gridMeta, maxValues, e.latlng.lat, e.latlng.lng) : null;
+      const min = minValues ? getValueAtLatLngFromGrid(gridMeta, minValues, e.latlng.lat, e.latlng.lng, { allowZero: true }) : null;
+      const max = maxValues ? getValueAtLatLngFromGrid(gridMeta, maxValues, e.latlng.lat, e.latlng.lng, { allowZero: true }) : null;
       setHover({ point: e.containerPoint, value: val, min, max });
     },
     mouseout()  { setHover(null); },
