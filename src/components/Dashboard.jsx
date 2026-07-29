@@ -56,6 +56,13 @@ export function Dashboard() {
             ))}
           </div>
 
+          {/* Family description was dropped dashboard-wide for being redundant with
+              the dataset description, but the Upload family's covers input file
+              requirements that live nowhere else in the UI — keep it there only. */}
+          {activeFamily.id === 'UPLOAD' && (
+            <p className="family-description">{activeFamily.description}</p>
+          )}
+
           {/* Only one dataset in this family (e.g. uploads) — nothing to switch between */}
           {datasetsInActiveFamily.length > 1 && <DatasetSelector />}
 
