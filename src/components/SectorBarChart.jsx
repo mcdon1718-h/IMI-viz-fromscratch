@@ -188,7 +188,8 @@ export function SectorBarChart() {
 
   const showUncertainty = hasUncertainty(controls.satellite);
   // Bottom-up series only appears alongside the posterior (ghgi_tropomi, CONUS)
-  const showBottomUp = controls.satellite === 'ghgi_tropomi' && activeDataset.id === 'ch4-conus';
+  const showBottomUp = controls.satellite === 'ghgi_tropomi'
+    && (activeDataset.id === 'ch4-conus' || activeDataset.id === 'ch4-global');
   const accent       = activeFamily.theme.accent;
 
   const bottomUpData = showBottomUp
