@@ -11,7 +11,7 @@ export const SECTOR_TO_GRID_VAR = {
 };
 
 export function manifestYearKey(year, satellite) {
-  return satellite === 'ghgi' ? `${year}_prior` : String(year);
+  return satellite === 'prior' ? `${year}_prior` : String(year);
 }
 
 export function getManifestEntry(manifest, sectorKey, year, satellite) {

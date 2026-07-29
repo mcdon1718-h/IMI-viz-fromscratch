@@ -64,10 +64,10 @@ registerDataset({
       type:    'select',
       group:   'selects-row',
       options: [
-        { value: 'ghgi_tropomi', label: 'Posterior (TROPOMI-corrected)' },
-        { value: 'ghgi',         label: 'Prior (Bottom-up Inventory)'   },
+        { value: 'posterior', label: 'Posterior (TROPOMI-corrected)' },
+        { value: 'prior',     label: 'Prior (Bottom-up Inventory)'   },
       ],
-      default: 'ghgi_tropomi',
+      default: 'posterior',
     },
     {
       key:     'sector',
@@ -138,7 +138,7 @@ registerDataset({
       // Data Source mode (see computeChoroplethDomain / centralCol).
       const row = {};
       // stateByYearPrior: bare keys, prior only — backs the bottom-up bar
-      // chart branch (buildBarData's satellite === 'ghgi' path).
+      // chart branch (buildBarData's satellite === 'prior' path).
       const priorBare = {};
 
       for (const s of BAR_SECTOR_KEYS) {

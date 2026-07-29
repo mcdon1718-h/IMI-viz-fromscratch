@@ -53,10 +53,10 @@ export function DataTotals() {
 
     // ── CONUS national ────────────────────────────────────────────────────────
     // Bottom-up is always GHGI prior (available for 2019–2020 only).
-    // Posterior is only shown when satellite = ghgi_tropomi.
+    // Posterior is only shown when satellite = posterior.
     if (!isState) {
       const priorRow = baseData.nationalPrior?.[year];
-      const postRow  = satellite === 'ghgi_tropomi'
+      const postRow  = satellite === 'posterior'
         ? baseData.nationalPosterior?.[year]
         : null;
 
@@ -84,8 +84,8 @@ export function DataTotals() {
     };
     const priorAvail = priorRow ? componentKeys.filter(s => getBottomUp(s) != null) : [];
 
-    // Posterior: _posterior suffix in byYear (only when ghgi_tropomi)
-    const postRow = satellite === 'ghgi_tropomi'
+    // Posterior: _posterior suffix in byYear (only when posterior)
+    const postRow = satellite === 'posterior'
       ? baseData.byYear?.[year]?.[selectedState]
       : null;
     const getPost = (s) => {

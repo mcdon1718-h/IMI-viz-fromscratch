@@ -39,10 +39,10 @@ registerDataset({
       type:    'select',
       group:   'selects-row',
       options: [
-        { value: 'ghgi_tropomi', label: 'Top-down, posterior (GHGI & TROPOMI)' },
-        { value: 'ghgi',         label: 'Bottom-up, prior (GHGI)'      },
+        { value: 'posterior', label: 'Top-down, posterior (GHGI & TROPOMI)' },
+        { value: 'prior',     label: 'Bottom-up, prior (GHGI)'      },
       ],
-      default: 'ghgi_tropomi',
+      default: 'posterior',
     },
     {
       key:        'sector',
@@ -59,7 +59,7 @@ registerDataset({
       type:    'select',
       group:   'selects-row',
       options: (controls) =>
-        (controls.satellite === 'ghgi'
+        (controls.satellite === 'prior'
           ? [2019, 2020]
           : [2019, 2020, 2021, 2022, 2023, 2024]
         ).map(y => ({ value: y, label: String(y) })),

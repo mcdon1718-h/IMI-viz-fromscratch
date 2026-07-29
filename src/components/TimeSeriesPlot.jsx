@@ -93,7 +93,7 @@ export function TimeSeriesPlot() {
   });
 
   const showUncertainty = hasUncertainty(controls.satellite);
-  const showBottomUp    = controls.satellite === 'ghgi_tropomi' && activeDataset.id === 'ch4-conus';
+  const showBottomUp    = controls.satellite === 'posterior' && activeDataset.id === 'ch4-conus';
   const accent          = activeFamily.theme.accent;
   const accentDim       = activeFamily.theme.accentDim;
 

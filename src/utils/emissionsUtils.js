@@ -59,12 +59,12 @@ export function parseNumber(x) {
 
 // ─── Column name helpers ──────────────────────────────────────────────────────
 export function mapValueCol(satellite) {
-  return satellite === 'ghgi' ? 'Total_prior' : 'Total_posterior';
+  return satellite === 'prior' ? 'Total_prior' : 'Total_posterior';
 }
 
 export function centralCol(sectorKey, mode, satellite) {
   if (mode === 'national') return sectorKey;  // national CSV has no suffix
-  return satellite === 'ghgi'
+  return satellite === 'prior'
     ? `${sectorKey}_prior`
     : `${sectorKey}_posterior`;
 }
@@ -73,12 +73,12 @@ export function minCol(key) { return `${key}_min`; }
 export function maxCol(key) { return `${key}_max`; }
 
 export function hasUncertainty(satellite) {
-  return satellite !== 'ghgi';
+  return satellite !== 'prior';
 }
 
 // Which years are valid for each data source
 export function activeYears(satellite) {
-  return satellite === 'ghgi'
+  return satellite === 'prior'
     ? [2019, 2020]
     : [2019, 2020, 2021, 2022, 2023, 2024];
 }
@@ -92,13 +92,13 @@ export function buildBarData(baseData, { year, mode, satellite, selectedState })
   let bareKeys;  // true = bare sector key, false = _posterior suffix
 
   if (mode === 'national') {
-    row      = satellite === 'ghgi'
+    row      = satellite === 'prior'
       ? (nationalPrior?.[year]     ?? null)
       : (nationalPosterior?.[year] ?? null);
     bareKeys = true;  // both national CSVs use bare keys
   } else {
     if (!selectedState) return { labels: [], values: [], mins: [], maxs: [] };
-    if (satellite === 'ghgi') {
+    if (satellite === 'prior') {
       row      = stateByYearPrior?.[year]?.[selectedState] ?? null;
       bareKeys = true;   // state prior CSV uses bare keys
     } else {
@@ -138,17 +138,17 @@ export function buildLineData(baseData, { mode, sectorKey, satellite, selectedSt
 
   // national CSVs and state prior CSV all use bare keys;
   // state posterior CSV uses _posterior suffix
-  const bareKeys = mode === 'national' || satellite === 'ghgi';
+  const bareKeys = mode === 'national' || satellite === 'prior';
   const col      = bareKeys ? sectorKey : `${sectorKey}_posterior`;
 
   function getRow(year) {
     if (mode === 'national') {
-      return satellite === 'ghgi'
+      return satellite === 'prior'
         ? (nationalPrior?.[year]     ?? null)
         : (nationalPosterior?.[year] ?? null);
     }
     if (!selectedState) return null;
-    return satellite === 'ghgi'
+    return satellite === 'prior'
       ? (stateByYearPrior?.[year]?.[selectedState] ?? null)
       : (byYear?.[year]?.[selectedState]           ?? null);
   }
