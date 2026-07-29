@@ -1,6 +1,6 @@
-This repo is for a website which serves as a general tool for visualizing map + plot data for completed research projects using the IMI (Integrated Methane Inversion) model. Will eventually include CO2 for the ICI (Integrated Carbon Inversion). 
+This website is an interactive data visualization tool serving as a community-wide means for displaying IMI (Interactive Methane Inversion) model research results. The site has two functions: it stores a repository of mature CH4 (and eventually CO2) emissions datasets supported by publications, and provides a user testbed for visualizing your own research output locally in your browser. 
 
-IMI website: 
-https://carboninversion.com
+Datasets can be added to the research repository by contacting the IMI support team at integrated-methane-inversion@g.harvard.edu. Before doing so, please ensure your data formatting is compatible with our backend by testing it in the uploads tab. Uploaded data is only stored locally in your browser, and is not cached or archived anywhere. Uploaded data will not be added to the research archive unless you request it. 
 
-Users should be able to submit their IMI results data to be visualized on this website; style guide to follow once site is live. 
+For further information on the IMI model, see the IMI website: 
+https://carboninversion.com 
