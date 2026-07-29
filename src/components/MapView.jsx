@@ -547,6 +547,7 @@ function JsonGridLayer({ gridMeta, filePath, domainMax, colorStops, opacity, onR
 function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady, onDeselect, onLoadingChange }) {
   const map = useMap();
   const layerRef = useRef(null);
+  const rendererRef = useRef(null);
   const styleRef = useRef({ colorStops, opacity, domainMax: 1 });
   styleRef.current.colorStops = colorStops;
   styleRef.current.opacity = opacity;
@@ -590,9 +591,12 @@ function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady,
           }
         } catch (_) {}
 
+        const renderer = L.canvas({ pane: 'countryGridPane' });
+        rendererRef.current = renderer;
+
         const layer = L.geoJSON(data, {
           pane:     'countryGridPane',
-          renderer: L.canvas({ pane: 'countryGridPane' }),
+          renderer,
           style:    styleFeature,
           onEachFeature: (feature, lyr) => {
             const v = feature.properties?.emissions;
@@ -626,6 +630,13 @@ function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady,
       if (layerRef.current) {
         try { map.removeLayer(layerRef.current); } catch (_) {}
         layerRef.current = null;
+      }
+      // The canvas renderer is a separate Leaflet layer of its own — removing
+      // the geoJSON layer above does not detach its <canvas> from the map, so
+      // without this it's left behind covering the pane and swallowing clicks.
+      if (rendererRef.current) {
+        try { map.removeLayer(rendererRef.current); } catch (_) {}
+        rendererRef.current = null;
       }
       onDomainReady?.(null);
       onLoadingChange?.(false);
@@ -801,7 +812,7 @@ export function MapView() {
   // ── Per-country masked grid file path (ch4-global) ────────────────────────
   const countryGridFilePath = useMemo(() => {
     if (activeDataset.gridType !== 'country-mask' || !selectedState) return null;
-    return `/data/ch4_global/country_emissions/${encodeURIComponent(selectedState.replace(/ /g, '_'))}_masked.json`;
+    return `${import.meta.env.BASE_URL}data/ch4_global/country_emissions/${encodeURIComponent(selectedState.replace(/ /g, '_'))}_masked.json`;
   }, [activeDataset.gridType, selectedState]);
 
   // ── Raster/grid domain ────────────────────────────────────────────────────
