@@ -105,7 +105,7 @@ registerDataset({
   ],
 
   display: {
-    units:       'kg/week',
+    units:       'Gg/week',
     legendTitle: 'CH₄ Emissions',
     legendUnits: 'kg h⁻¹',
     colorScale: {

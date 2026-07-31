@@ -18,10 +18,15 @@ import {
   labelSector,
   hasUncertainty,
 }                                  from '../utils/emissionsUtils';
+import { buildPeriodBarData }       from '../utils/manifestUtils';
 
 const DIM_COLOR    = '#99a7b9';
 const BRIGHT_COLOR = '#e2e8f0';
 const TEAL_COLOR   = '#14b8a6';
+
+// Manifest total_kg values are in the tens-of-millions for a whole-basin
+// week; Gg (1e6 kg) keeps the axis/tooltip numbers readable.
+const KG_TO_GG = 1e6;
 
 function UploadBarTooltip({ active, payload, label, units, accent }) {
   if (!active || !payload?.length) return null;
@@ -164,6 +169,82 @@ export function SectorBarChart() {
             <Bar dataKey="value" name="Total" radius={[0, 3, 3, 0]}>
               {chartData.map((_, i) => (
                 <Cell key={i} fill={accent} fillOpacity={0.85} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
+
+  if (activeDataset.gridType === 'period') {
+    if (!baseData?.manifest) return null;
+
+    // Both sources are always shown here, independent of the Data Source
+    // control (which only drives what's rendered on the map) — same
+    // philosophy as ch4-global's DataTotals.
+    const post = buildPeriodBarData(baseData.manifest, 'posterior', controls.period);
+    const prior = buildPeriodBarData(baseData.manifest, 'prior', controls.period);
+    if (!post.labels.length) return null;
+
+    const accent    = activeFamily.theme.accent;
+    const weekStart = baseData.manifest.periods?.find(p => p.key === String(controls.period))?.start;
+
+    const chartData = post.labels.map((sector, i) => ({
+      sector,
+      value:         post.values[i]  != null ? post.values[i]  / KG_TO_GG : null,
+      bottomUpValue: prior.values[i] != null ? prior.values[i] / KG_TO_GG : null,
+    }));
+
+    return (
+      <div className="chart-panel">
+        <div className="chart-header">
+          <span className="chart-title">Sector Breakdown</span>
+          <span className="chart-year">{weekStart}</span>
+          <span className="chart-units">{activeDataset.display.units}</span>
+        </div>
+
+        <ResponsiveContainer width="100%" height={320}>
+          <BarChart
+            layout="vertical"
+            data={chartData}
+            margin={{ top: 4, right: 12, left: 0, bottom: 4 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+            <XAxis
+              type="number"
+              tick={{ fill: '#94a3b8', fontSize: 13 }}
+              axisLine={{ stroke: '#2d3148' }}
+              tickLine={false}
+            />
+            <YAxis
+              type="category"
+              dataKey="sector"
+              tick={{ fill: '#94a3b8', fontSize: 14 }}
+              axisLine={false}
+              tickLine={false}
+              width={90}
+            />
+            <Tooltip
+              content={
+                <SectorBarCustomTooltip
+                  units={activeDataset.display.units}
+                  accent={accent}
+                  showUncertainty={false}
+                  showBottomUp
+                />
+              }
+              cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+            />
+
+            <Bar dataKey="value" name="Posterior" radius={[0, 3, 3, 0]}>
+              {chartData.map((_, i) => (
+                <Cell key={i} fill={accent} fillOpacity={0.85} />
+              ))}
+            </Bar>
+            <Bar dataKey="bottomUpValue" name="Bottom-up" radius={[0, 3, 3, 0]}>
+              {chartData.map((_, i) => (
+                <Cell key={i} fill={TEAL_COLOR} fillOpacity={0.75} />
               ))}
             </Bar>
           </BarChart>

@@ -19,10 +19,15 @@ import {
   hasUncertainty,
   activeYears,
 }                                  from '../utils/emissionsUtils';
+import { buildPeriodLineData }      from '../utils/manifestUtils';
 
 const DIM_COLOR    = '#99a7b9';
 const BRIGHT_COLOR = '#e2e8f0';
 const TEAL_COLOR   = '#14b8a6';
+
+// Manifest total_kg values are in the tens-of-millions for a whole-basin
+// week; Gg (1e6 kg) keeps the axis/tooltip numbers readable.
+const KG_TO_GG = 1e6;
 
 function TimeSeriesCustomTooltip({ active, payload, label, units, accent }) {
   if (!active || !payload?.length) return null;
@@ -78,6 +83,111 @@ const SUPPORTED = new Set(['ch4-conus', 'ch4-colombia']);
 export function TimeSeriesPlot() {
   const { activeDataset, activeFamily, controls, selectedState } = useDatasetContext();
   const { data: baseData } = useEmissionData();
+
+  if (activeDataset.gridType === 'period') {
+    if (!baseData?.manifest) return null;
+
+    // Both sources are always shown here, independent of the Data Source
+    // control (which only drives what's rendered on the map) — same
+    // philosophy as ch4-global's DataTotals.
+    const post  = buildPeriodLineData(baseData.manifest, 'posterior', controls.sector);
+    const prior = buildPeriodLineData(baseData.manifest, 'prior', controls.sector);
+    if (!post.dates.length) return null;
+
+    const accent      = activeFamily.theme.accent;
+    const sectorLabel = baseData.manifest.variables?.find(v => v.key === controls.sector)?.label ?? controls.sector;
+    const currentDate = baseData.manifest.periods?.find(p => p.key === String(controls.period))?.start;
+
+    // One tick per calendar year, rather than one per week (286 of them).
+    const yearTicks = [];
+    const seenYears = new Set();
+    for (const d of post.dates) {
+      const y = d.slice(0, 4);
+      if (!seenYears.has(y)) { seenYears.add(y); yearTicks.push(d); }
+    }
+
+    const chartData = post.dates.map((date, i) => ({
+      date,
+      value:    post.values[i]  != null ? post.values[i]  / KG_TO_GG : null,
+      bottomUp: prior.values[i] != null ? prior.values[i] / KG_TO_GG : null,
+    }));
+
+    return (
+      <div className="chart-panel">
+        <div className="chart-header">
+          <span className="chart-title">Time Series</span>
+          <span className="chart-sector">{sectorLabel}</span>
+          <span className="chart-units">{activeDataset.display.units}</span>
+        </div>
+
+        <ResponsiveContainer width="100%" height={160}>
+          <ComposedChart
+            data={chartData}
+            margin={{ top: 22, right: 16, left: 0, bottom: 0 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+            <XAxis
+              dataKey="date"
+              ticks={yearTicks}
+              tickFormatter={v => v.slice(0, 4)}
+              tick={{ fill: '#94a3b8', fontSize: 13 }}
+              axisLine={{ stroke: '#2d3148' }}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fill: '#94a3b8', fontSize: 13 }}
+              axisLine={{ stroke: '#2d3148' }}
+              tickLine={false}
+              width={52}
+            />
+
+            <Tooltip
+              content={<TimeSeriesCustomTooltip units={activeDataset.display.units} accent={accent} />}
+              cursor={{
+                stroke:          accent,
+                strokeOpacity:   0.4,
+                strokeWidth:     1,
+                strokeDasharray: '4 4',
+              }}
+            />
+
+            <Line
+              type="monotone"
+              dataKey="value"
+              name="Posterior"
+              stroke={accent}
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4, strokeWidth: 0 }}
+              isAnimationActive={false}
+            />
+
+            <Line
+              type="monotone"
+              dataKey="bottomUp"
+              name="Bottom-up"
+              stroke={TEAL_COLOR}
+              strokeWidth={1.5}
+              strokeDasharray="5 3"
+              dot={false}
+              activeDot={{ r: 4, strokeWidth: 0 }}
+              isAnimationActive={false}
+              connectNulls={false}
+            />
+
+            {currentDate && (
+              <ReferenceLine
+                x={currentDate}
+                stroke={accent}
+                strokeWidth={1.5}
+                strokeDasharray="4 4"
+              />
+            )}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
 
   const years = activeYears(controls.satellite);
   if (!SUPPORTED.has(activeDataset.id) || years.length < 2 || !baseData) return null;

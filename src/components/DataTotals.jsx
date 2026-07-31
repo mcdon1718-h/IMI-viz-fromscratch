@@ -2,8 +2,13 @@ import React, { useMemo } from 'react';
 import { useDatasetContext } from '../context/DatasetContext';
 import { useEmissionData }   from '../hooks/useEmissionData';
 import { parseNumber }       from '../utils/emissionsUtils';
+import { PERMIAN_TOTAL_VARIABLE, getPeriodAnthroTotal } from '../utils/manifestUtils';
 
-const SUPPORTED = new Set(['ch4-conus', 'ch4-colombia', 'ch4-global']);
+const SUPPORTED = new Set(['ch4-conus', 'ch4-colombia', 'ch4-global', 'ch4-permian-weekly']);
+
+// Manifest total_kg values are in the tens-of-millions for a whole-basin
+// week; Gg (1e6 kg) keeps them readable, matching the two plots.
+const KG_TO_GG = 1e6;
 
 export function DataTotals() {
   const { activeDataset, controls, selectedState } = useDatasetContext();
@@ -11,10 +16,32 @@ export function DataTotals() {
 
   const { year, satellite } = controls;
   const isState = !!selectedState;
+  const isPermian = activeDataset.id === 'ch4-permian-weekly';
 
   const { totalBottomUp, anthroBottomUp, totalPost, anthroPost } = useMemo(() => {
     const empty = { totalBottomUp: null, anthroBottomUp: null, totalPost: null, anthroPost: null };
     if (!SUPPORTED.has(activeDataset.id) || !baseData) return empty;
+
+    // ── Permian weekly ───────────────────────────────────────────────────────
+    // Manifest has no separate "Anthropogenic" aggregate (unlike the CONUS/
+    // Colombia/global CSVs) — only per-sector totals — so it's summed
+    // client-side; see PERMIAN_NATURAL_VARIABLES in manifestUtils.js to
+    // change the categorization. Both sources are always shown regardless
+    // of the Data Source control, same as ch4-global below — that control
+    // only drives the map's layer.
+    if (isPermian) {
+      const key   = String(controls.period);
+      const prior = baseData.manifest?.data?.prior?.[PERMIAN_TOTAL_VARIABLE]?.[key];
+      const post  = baseData.manifest?.data?.posterior?.[PERMIAN_TOTAL_VARIABLE]?.[key];
+      const anthroPriorTotal = getPeriodAnthroTotal(baseData.manifest, 'prior', key);
+      const anthroPostTotal  = getPeriodAnthroTotal(baseData.manifest, 'posterior', key);
+      return {
+        totalBottomUp:  prior?.total_kg != null ? prior.total_kg / KG_TO_GG : null,
+        anthroBottomUp: anthroPriorTotal != null ? anthroPriorTotal / KG_TO_GG : null,
+        totalPost:      post?.total_kg  != null ? post.total_kg  / KG_TO_GG : null,
+        anthroPost:     anthroPostTotal  != null ? anthroPostTotal  / KG_TO_GG : null,
+      };
+    }
 
     // ── Colombia ─────────────────────────────────────────────────────────────
     // No bottom-up data yet; total = anthro (all sectors are anthropogenic)
@@ -104,7 +131,7 @@ export function DataTotals() {
         ? postAvail.filter(s => s !== 'Wetlands').reduce((acc, s) => acc + getPost(s), 0)
         : null,
     };
-  }, [activeDataset.id, baseData, year, satellite, isState, selectedState]);
+  }, [activeDataset.id, baseData, year, satellite, isState, selectedState, isPermian, controls.period]);
 
   if (!SUPPORTED.has(activeDataset.id) || !baseData) return null;
 
@@ -115,7 +142,13 @@ export function DataTotals() {
     ? selectedState.toUpperCase()
     : activeDataset.id === 'ch4-colombia' ? 'COLOMBIA'
     : activeDataset.id === 'ch4-global'   ? 'WORLD'
+    : isPermian                           ? 'PERMIAN BASIN'
     : 'NATIONAL';
+
+  // Weekly data reads better as its actual start date than the coarser Year control
+  const periodLabel = isPermian
+    ? (baseData.manifest?.periods?.find(p => p.key === String(controls.period))?.start ?? year)
+    : year;
 
   // Helper: render a number cell — accented if populated, dimmed if not
   function NumCell({ value }) {
@@ -130,7 +163,7 @@ export function DataTotals() {
 
   return (
     <div className="data-totals-panel">
-      <div className="data-totals-place">{placeLabel}{' - '}{year}</div>
+      <div className="data-totals-place">{placeLabel}{' - '}{periodLabel}</div>
 
       <div className="data-totals-table">
         <div className="dtc-spacer" />
