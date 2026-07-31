@@ -1,7 +1,7 @@
 import React, { useMemo }         from 'react';
 import { useDatasetContext }       from '../context/DatasetContext';
 import { useEmissionData }         from '../hooks/useEmissionData';
-import { getGlobalDomain }         from '../utils/manifestUtils';
+import { getGlobalDomain, getPeriodGlobalDomain } from '../utils/manifestUtils';
 import { computeChoroplethDomain } from '../utils/emissionsUtils';
 
 const GRADIENT = `linear-gradient(to right,
@@ -17,7 +17,8 @@ export function Legend() {
   // ch4-global has no viewMode control — its "grid" is the masked per-country
   // overlay, active only once a country is selected.
   const isCountryGrid = activeDataset.gridType === 'country-mask' && !!selectedState;
-  const isGrid        = controls.viewMode === 'grid' || isCountryGrid;
+  // ch4-permian-weekly likewise has no viewMode control — it's grid-only.
+  const isGrid        = controls.viewMode === 'grid' || isCountryGrid || activeDataset.gridType === 'period';
   const isChoropleth   = !isGrid;
 
   const rasterDomain = useMemo(() => {
@@ -25,9 +26,12 @@ export function Legend() {
 
   const scaleMax = controls.maxEmission ?? controls.colorScaleMax ?? 1.0;
 
-  // CONUS — manifest carries a pre-computed global max per sector/year
+  // CONUS / permian-weekly — manifest carries a pre-computed global max
+  // per sector/year (CONUS) or per satellite/variable (permian-weekly)
   if (baseData?.manifest) {
-    const global = getGlobalDomain(baseData.manifest, controls.sector);
+    const global = activeDataset.gridType === 'period'
+      ? getPeriodGlobalDomain(baseData.manifest, controls.satellite, controls.sector)
+      : getGlobalDomain(baseData.manifest, controls.sector);
     return { min: global.min, max: global.max * scaleMax };
   }
 
@@ -38,7 +42,7 @@ export function Legend() {
   }
 
   return null;
-}, [isGrid, baseData, controls.sector, controls.maxEmission, controls.colorScaleMax, jsonGridDomain]);
+}, [isGrid, baseData, activeDataset.gridType, controls.sector, controls.satellite, controls.maxEmission, controls.colorScaleMax, jsonGridDomain]);
 
   const choroplethDomain = useMemo(() => {
     if (!isChoropleth || !baseData) return null;

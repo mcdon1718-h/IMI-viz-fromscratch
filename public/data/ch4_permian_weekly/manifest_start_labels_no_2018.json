@@ -5,7 +5,7 @@
   "asset_version": "20260604T194208Z",
   "region": {
     "name": "Permian Basin U.S.",
-    "source_dir": "imi_output/permian"
+    "source_dir": "public/data/ch4_permian_weekly/tif"
   },
   "defaults": {
     "dataset": "posterior",

@@ -52,3 +52,27 @@ export function resolveTifUrl(dataRoot, manifestTifPath) {
   const stripped = manifestTifPath.replace(/^data\//, '');
   return `${dataRoot}/${stripped}`;
 }
+
+// ── Period-keyed manifests (ch4-permian-weekly) ────────────────────────────
+// Shape: manifest.data[dataset][variable][periodKey] = { tif, nc, min, max, total_kg }
+// dataset  = 'posterior' | 'prior'   (== controls.satellite)
+// variable = full manifest variable key, e.g. 'EmisCH4_Total_ExclSoilAbs'   (== controls.sector)
+// periodKey = manifest period key, e.g. '27'                               (== controls.period)
+
+export function getPeriodManifestEntry(manifest, dataset, variable, periodKey) {
+  if (!manifest || periodKey == null) return null;
+  return manifest.data?.[dataset]?.[variable]?.[String(periodKey)] ?? null;
+}
+
+export function getPeriodGlobalDomain(manifest, dataset, variable) {
+  const entries = manifest?.data?.[dataset]?.[variable];
+  if (!entries) return { min: 0, max: 1 };
+
+  let gMax = -Infinity;
+  for (const entry of Object.values(entries)) {
+    const mx = Number(entry?.max);
+    if (Number.isFinite(mx)) gMax = Math.max(gMax, mx);
+  }
+
+  return { min: 0, max: Number.isFinite(gMax) ? gMax : 1 };
+}

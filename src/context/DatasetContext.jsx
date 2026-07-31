@@ -43,14 +43,21 @@ function reducer(state, action) {
     case 'SET_CONTROL': {
       const newControls = { ...state.controls, [action.key]: action.value };
 
-      if (action.key === 'satellite') {
-        const dataset     = getDataset(state.activeDatasetId);
-        const yearControl = dataset.controls.find(c => c.key === 'year');
-        if (yearControl?.options && typeof yearControl.options === 'function') {
-          const validYears = yearControl.options(newControls).map(o => o.value);
-          if (!validYears.includes(newControls.year)) {
-            newControls.year = validYears[validYears.length - 1];
-          }
+      // Any other control whose valid options depend on this one (e.g. a
+      // "week" slider scoped to the selected "year") gets reclamped to its
+      // nearest valid value if the change just made its current value stale.
+      const dataset = getDataset(state.activeDatasetId);
+      for (const c of dataset.controls) {
+        if (c.key === action.key || typeof c.options !== 'function') continue;
+        const validValues = c.options(newControls).map(o => (o && typeof o === 'object' ? o.value : o));
+        if (validValues.length && !validValues.includes(newControls[c.key])) {
+          const current = newControls[c.key];
+          // Numeric controls (e.g. a "week" slider scoped to a "year" select)
+          // snap to the nearest still-valid value; others keep the original
+          // "most recent" fallback (e.g. satellite change narrowing years).
+          newControls[c.key] = typeof current === 'number'
+            ? validValues.reduce((a, b) => Math.abs(b - current) < Math.abs(a - current) ? b : a)
+            : validValues[validValues.length - 1];
         }
       }
       return { ...state, controls: newControls };

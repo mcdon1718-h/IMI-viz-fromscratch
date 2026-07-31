@@ -18,6 +18,8 @@ import { useEmissionData }   from '../hooks/useEmissionData';
 import {
   getManifestEntry,
   getGlobalDomain,
+  getPeriodManifestEntry,
+  getPeriodGlobalDomain,
   resolveTifUrl,
 } from '../utils/manifestUtils';
 import {
@@ -745,7 +747,10 @@ export function MapView() {
 
   const { mapConfig, display, dataRoot } = activeDataset;
   const colorStops = display.colorScale?.stops ?? [];
-  const isGridMode = controls.viewMode === 'grid';
+  // ch4-permian-weekly has no choropleth alternative (no per-state CSV data)
+  // and thus no viewMode control — its "grid" is always on, like ch4-global's
+  // country-mask overlay.
+  const isGridMode = controls.viewMode === 'grid' || activeDataset.gridType === 'period';
 
   const [activeGeoRaster, setActiveGeoRaster] = useState(null);
   const [activeJsonGridValues, setActiveJsonGridValues] = useState(null);
@@ -761,36 +766,39 @@ export function MapView() {
     setJsonGridDomain(null);
   }, [activeDataset.id, controls.sector, controls.year, setJsonGridDomain]);
 
-  // ── TIF URL (CONUS grid mode) ─────────────────────────────────────────────
+  const isPeriodGrid = activeDataset.gridType === 'period';
+
+  // ── TIF URL (CONUS / permian-weekly grid mode) ────────────────────────────
   const tifUrl = useMemo(() => {
     if (!baseData?.manifest || !isGridMode) return null;
-    const entry = getManifestEntry(
-      baseData.manifest, controls.sector, controls.year, controls.satellite,
-    );
+    const entry = isPeriodGrid
+      ? getPeriodManifestEntry(baseData.manifest, controls.satellite, controls.sector, controls.period)
+      : getManifestEntry(baseData.manifest, controls.sector, controls.year, controls.satellite);
     return entry?.tif ? resolveTifUrl(dataRoot ?? '', entry.tif) : null;
   }, [
-    baseData?.manifest, controls.viewMode, controls.sector,
-    controls.year, controls.satellite, dataRoot,
+    baseData?.manifest, controls.viewMode, controls.sector, isPeriodGrid,
+    controls.year, controls.satellite, controls.period, dataRoot,
   ]);
 
   // ── Ensemble min/max URLs (posterior hover uncertainty, CONUS grid mode) ──
   // Only populated for posterior years in manifest.json -- absent for
-  // "_prior" (GHGI has no ensemble), so these resolve to null there.
+  // "_prior" (GHGI has no ensemble) and for period-keyed manifests (permian
+  // weekly has no ensemble rasters), so these resolve to null there.
   const minTifUrl = useMemo(() => {
-    if (!baseData?.manifest || !isGridMode) return null;
+    if (!baseData?.manifest || !isGridMode || isPeriodGrid) return null;
     const entry = getManifestEntry(
       baseData.manifest, controls.sector, controls.year, controls.satellite,
     );
     return entry?.minTif ? resolveTifUrl(dataRoot ?? '', entry.minTif) : null;
-  }, [baseData?.manifest, controls.sector, controls.year, controls.satellite, dataRoot]);
+  }, [baseData?.manifest, controls.sector, controls.year, controls.satellite, isPeriodGrid, dataRoot]);
 
   const maxTifUrl = useMemo(() => {
-    if (!baseData?.manifest || !isGridMode) return null;
+    if (!baseData?.manifest || !isGridMode || isPeriodGrid) return null;
     const entry = getManifestEntry(
       baseData.manifest, controls.sector, controls.year, controls.satellite,
     );
     return entry?.maxTif ? resolveTifUrl(dataRoot ?? '', entry.maxTif) : null;
-  }, [baseData?.manifest, controls.sector, controls.year, controls.satellite, dataRoot]);
+  }, [baseData?.manifest, controls.sector, controls.year, controls.satellite, isPeriodGrid, dataRoot]);
 
   const minGeoraster = useGeoraster(minTifUrl);
   const maxGeoraster = useGeoraster(maxTifUrl);
@@ -820,7 +828,9 @@ export function MapView() {
     if (!isGridMode) return { min: 0, max: 1 };
     const scaleMax = controls.maxEmission ?? controls.colorScaleMax ?? 1.0;
     if (baseData?.manifest) {
-      const g = getGlobalDomain(baseData.manifest, controls.sector);
+      const g = isPeriodGrid
+        ? getPeriodGlobalDomain(baseData.manifest, controls.satellite, controls.sector)
+        : getGlobalDomain(baseData.manifest, controls.sector);
       return { min: 0, max: g.max * scaleMax };
     }
     if (jsonGridDomain != null) {
@@ -828,7 +838,7 @@ export function MapView() {
     }
     return { min: 0, max: 1 };
   }, [
-    controls.viewMode, baseData?.manifest, controls.sector,
+    controls.viewMode, baseData?.manifest, controls.sector, isPeriodGrid, controls.satellite,
     controls.maxEmission, controls.colorScaleMax, jsonGridDomain,
   ]);
 
@@ -897,7 +907,7 @@ export function MapView() {
         />
 
         {/* Grid hover tooltip — TIF mode only */}
-        {isGridMode && !activeDataset.gridType && (
+        {isGridMode && (!activeDataset.gridType || isPeriodGrid) && (
           <GridHoverLayer
             georaster={activeGeoRaster}
             minGeoraster={minGeoraster}
@@ -933,8 +943,8 @@ export function MapView() {
           />
         )}
 
-        {/* TIF raster (CONUS) */}
-        {isGridMode && !activeDataset.gridType && tifUrl && (
+        {/* TIF raster (CONUS / permian-weekly) */}
+        {isGridMode && (!activeDataset.gridType || isPeriodGrid) && tifUrl && (
           <RasterLayer
             key={tifUrl}
             tifUrl={tifUrl}

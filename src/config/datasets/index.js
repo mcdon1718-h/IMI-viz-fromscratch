@@ -4,6 +4,7 @@
 import './ch4/global';
 import './ch4/conus';
 import './ch4/colombia';
+import './ch4/permian_weekly';
 
 import './co2/usa'
 import './co2/global'
