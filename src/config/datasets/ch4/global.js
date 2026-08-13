@@ -43,7 +43,7 @@ registerDataset({
   id:     'ch4-global',
   family: 'CH4',
   name:   'Global',
-  description: 'Global anthropogenic methane emissions by country. Emissions estimates come from inversions of TROPOMI satellite methane observations. Data available for 2023 only. See East et al. (2025) for details.',
+  description: 'Annual anthropogenic methane emissions by country at 25 km resolution, from East et al. (2025) . Anthropogenic national emission estimates from UNFCCC reports and natural emission estimates from various inventories are corrected by inversion of TROPOMI satellite methane observations to produce best estimates of emissions.',
   citation: { text: 'East et al. (2025)', url: 'https://www.nature.com/articles/s41467-025-67122-8' },
   satellites: ['TROPOMI'],
 
@@ -64,8 +64,8 @@ registerDataset({
       type:    'select',
       group:   'selects-row',
       options: [
-        { value: 'posterior', label: 'Posterior (TROPOMI-corrected)' },
-        { value: 'prior',     label: 'Prior (Bottom-up Inventory)'   },
+        { value: 'posterior', label: 'TROPOMI-corrected' },
+        { value: 'prior',     label: 'UNFCCC Reports'   },
       ],
       default: 'posterior',
     },
