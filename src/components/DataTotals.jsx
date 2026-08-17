@@ -138,6 +138,11 @@ export function DataTotals() {
   const units = activeDataset.display.units;
   const fmt   = v => (v != null && Number.isFinite(v)) ? v.toFixed(2) : '—';
 
+  // Natural = Total minus Anthropogenic, derived rather than sourced directly
+  // — every branch above already computes both, so this needs no per-dataset case.
+  const naturalBottomUp = (totalBottomUp != null && anthroBottomUp != null) ? totalBottomUp - anthroBottomUp : null;
+  const naturalPost      = (totalPost != null && anthroPost != null) ? totalPost - anthroPost : null;
+
   const placeLabel = selectedState
     ? selectedState.toUpperCase()
     : activeDataset.id === 'ch4-colombia' ? 'COLOMBIA'
@@ -150,13 +155,17 @@ export function DataTotals() {
     ? (baseData.manifest?.periods?.find(p => p.key === String(controls.period))?.start ?? year)
     : year;
 
-  // Helper: render a number cell — accented if populated, dimmed if not
-  function NumCell({ value }) {
+  // Helper: render a number cell — accented if populated, dimmed if not.
+  // `source` is a small caption naming where that column's number comes from
+  // (it replaces the old fixed "Bottom-up"/"Posterior" column headers, since
+  // the bottom-up source now differs by row — see the two calls below).
+  function NumCell({ value, source }) {
     const populated = value != null && Number.isFinite(value);
     return (
       <div className={`dtc-num ${populated ? 'dtc-accent' : 'dtc-dim'}`}>
         {fmt(value)}
         {populated && <span className="dtc-units"> {units}</span>}
+        <div className="dtc-source">{source}</div>
       </div>
     );
   }
@@ -166,17 +175,13 @@ export function DataTotals() {
       <div className="data-totals-place">{placeLabel}{' - '}{periodLabel}</div>
 
       <div className="data-totals-table">
-        <div className="dtc-spacer" />
-        <div className="dtc-header">Bottom-up</div>
-        <div className="dtc-header">Posterior</div>
-
         <div className="dtc-label">Anthropogenic</div>
-        <NumCell value={anthroBottomUp} />
-        <NumCell value={anthroPost} />
+        <NumCell value={anthroBottomUp} source="UNFCC reports" />
+        <NumCell value={anthroPost}     source="Best estimate" />
 
-        <div className="dtc-label">Total</div>
-        <NumCell value={totalBottomUp} />
-        <NumCell value={totalPost} />
+        <div className="dtc-label">Natural</div>
+        <NumCell value={naturalBottomUp} source="various inventories" />
+        <NumCell value={naturalPost}     source="Best estimate" />
       </div>
     </div>
   );

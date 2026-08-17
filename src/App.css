@@ -312,17 +312,6 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
   align-items:           center;
 }
 
-.dtc-spacer { /* empty cell — holds space under the row-label column */ }
-
-.dtc-header {
-  font-size:      .70rem;
-  font-weight:    600;
-  text-transform: uppercase;
-  letter-spacing: .07em;
-  color:          var(--text-muted);
-  text-align:     center;
-}
-
 .dtc-label {
   font-size:   .85rem;
   color:       var(--text-muted);
@@ -350,6 +339,14 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
   font-weight: 400;
   color:       var(--text-muted);
   opacity:     0.85;
+}
+
+.dtc-source {
+  font-size:      .68rem;
+  font-weight:    400;
+  color:          var(--text-muted);
+  opacity:        0.7;
+  margin-top:     .1rem;
 }
 
 .control-group-row {
