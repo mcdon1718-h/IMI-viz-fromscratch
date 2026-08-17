@@ -133,9 +133,10 @@ registerDataset({
   ],
 
   display: {
-    units:       'Tg/yr',
-    legendTitle: 'CH₄ Emissions',
-    legendUnits: 'kg km⁻² h⁻¹',
+    units:            'Tg/yr',
+    legendTitle:      'CH₄ Emissions',
+    legendUnits:      'kg km⁻² h⁻¹',
+    defaultPlaceLabel: 'Colombia', // shown in chart headers when no department is selected
     colorScale: {
       stops: [
         [0,    '#ffffcc'],

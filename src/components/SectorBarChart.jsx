@@ -256,7 +256,7 @@ export function SectorBarChart() {
   if (!baseData) return null;
 
   const mode       = selectedState ? 'state' : 'national';
-  const placeLabel = selectedState ?? 'National';
+  const placeLabel = selectedState ?? (activeDataset.display?.defaultPlaceLabel ?? 'National');
 
   const barData = buildBarData(baseData, {
     year:      controls.year,

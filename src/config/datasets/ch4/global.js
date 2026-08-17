@@ -96,9 +96,10 @@ registerDataset({
   ],
 
   display: {
-    units:       'Tg/yr',
-    legendTitle: 'CH₄ Emissions',
-    legendUnits: 'Tg/yr',
+    units:            'Tg/yr',
+    legendTitle:      'CH₄ Emissions',
+    legendUnits:      'Tg/yr',
+    defaultPlaceLabel: 'Global', // shown in chart headers when no country is selected
     colorScale: {
       stops: [
         [0,    '#ffffcc'],

@@ -193,7 +193,7 @@ export function TimeSeriesPlot() {
   if (!SUPPORTED.has(activeDataset.id) || years.length < 2 || !baseData) return null;
 
   const mode       = selectedState ? 'state' : 'national';
-  const placeLabel = selectedState ?? 'National';
+  const placeLabel = selectedState ?? (activeDataset.display?.defaultPlaceLabel ?? 'National');
 
   const lineData = buildLineData(baseData, {
     mode,

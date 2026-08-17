@@ -86,9 +86,10 @@ registerDataset({
   ],
 
   display: {
-    units:       'Tg/yr',
-    legendTitle: 'CH₄ Emissions',
-    legendUnits: 'kg km⁻² h⁻¹',
+    units:            'Tg/yr',
+    legendTitle:      'CH₄ Emissions',
+    legendUnits:      'kg km⁻² h⁻¹',
+    defaultPlaceLabel: 'National', // shown in chart headers when no state is selected
     colorScale: {
       stops: [
         [0,    '#ffffcc'],
