@@ -545,14 +545,42 @@ function JsonGridLayer({ gridMeta, filePath, domainMax, colorStops, opacity, onR
 // Colombia grid, there's no shared lats/lons metadata to reconstruct cells
 // from, so this just draws the features as given. Rendered on a canvas
 // renderer (features can number in the thousands for large countries).
+//
+// The pane is pointer-events:none (see below) so clicks fall through to the
+// country-selection layer underneath — otherwise this canvas, which always
+// spans the full map viewport regardless of the country's actual footprint,
+// would swallow every click and block selecting a different country. That
+// same setting means per-feature Leaflet tooltips never fire, so hover values
+// are looked up here directly (bounding-box scan, same idea as
+// getValueAtLatLngFromGrid) and rendered as a portal tooltip instead.
 
-function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady, onDeselect, onLoadingChange }) {
+function cellBBox(geometry) {
+  if (!geometry) return null;
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+  const walk = (coords) => {
+    if (typeof coords[0] === 'number') {
+      const [lon, lat] = coords;
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      return;
+    }
+    coords.forEach(walk);
+  };
+  walk(geometry.coordinates);
+  return Number.isFinite(minLat) ? { minLat, maxLat, minLon, maxLon } : null;
+}
+
+function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady, onLoadingChange }) {
   const map = useMap();
   const layerRef = useRef(null);
   const rendererRef = useRef(null);
   const styleRef = useRef({ colorStops, opacity, domainMax: 1 });
   styleRef.current.colorStops = colorStops;
   styleRef.current.opacity = opacity;
+  const cellsRef = useRef([]);
+  const [hover, setHover] = useState(null);
 
   const styleFeature = useCallback((feature) => {
     const { colorStops: cs, opacity: op, domainMax: dm } = styleRef.current;
@@ -580,6 +608,13 @@ function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady,
         const domainMax = values.length ? Math.max(...values) : 0;
         styleRef.current.domainMax = domainMax || 1;
 
+        cellsRef.current = (data.features ?? [])
+          .map(f => {
+            const box = cellBBox(f.geometry);
+            return box && { ...box, value: f.properties?.emissions };
+          })
+          .filter(Boolean);
+
         if (layerRef.current) {
           try { map.removeLayer(layerRef.current); } catch (_) {}
           layerRef.current = null;
@@ -589,7 +624,7 @@ function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady,
           if (!map.getPane('countryGridPane')) {
             map.createPane('countryGridPane');
             const p = map.getPane('countryGridPane');
-            if (p) p.style.zIndex = '648';
+            if (p) { p.style.zIndex = '648'; p.style.pointerEvents = 'none'; }
           }
         } catch (_) {}
 
@@ -600,15 +635,6 @@ function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady,
           pane:     'countryGridPane',
           renderer,
           style:    styleFeature,
-          onEachFeature: (feature, lyr) => {
-            const v = feature.properties?.emissions;
-            const label = v != null ? `${v.toFixed(5)}${units ? ` ${units}` : ''}` : 'N/A';
-            lyr.bindTooltip(label, { sticky: true });
-            // A tap anywhere on the grid re-toggles the country selection off,
-            // since the canvas layer otherwise blocks clicks reaching the
-            // choropleth polygon underneath it.
-            lyr.on('click', (e) => { e.originalEvent?.stopPropagation?.(); onDeselect?.(); });
-          },
         });
 
         try {
@@ -640,6 +666,8 @@ function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady,
         try { map.removeLayer(rendererRef.current); } catch (_) {}
         rendererRef.current = null;
       }
+      cellsRef.current = [];
+      setHover(null);
       onDomainReady?.(null);
       onLoadingChange?.(false);
     };
@@ -650,12 +678,50 @@ function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady,
     if (layerRef.current) layerRef.current.setStyle(styleFeature);
   }, [colorStops, opacity, styleFeature]);
 
-  return null;
+  useMapEvents({
+    mousemove(e) {
+      const { lat, lng } = e.latlng;
+      const hit = cellsRef.current.find(
+        c => lat >= c.minLat && lat <= c.maxLat && lng >= c.minLon && lng <= c.maxLon,
+      );
+      if (!hit || hit.value == null) { setHover(null); return; }
+      setHover({ point: e.containerPoint, value: hit.value });
+    },
+    mouseout()  { setHover(null); },
+    dragstart() { setHover(null); },
+  });
+
+  if (!hover) return null;
+
+  return createPortal(
+    <div
+      className="grid-hover-tooltip"
+      style={{ left: hover.point.x + 14, top: hover.point.y }}
+    >
+      {hover.value.toFixed(5)}
+      {units && <span className="grid-hover-units"> {units}</span>}
+    </div>,
+    map.getContainer(),
+  );
 }
 
 // ─── ChoroplethLayer ──────────────────────────────────────────────────────────
 
-function ChoroplethLayer({ geojson, stateDataMap, colKey, domain, colorStops, onStateClick }) {
+function ChoroplethLayer({
+  geojson, stateDataMap, colKey, domain, colorStops, opacity, suppressTooltipFor, onStateClick,
+}) {
+  // onEachFeature only runs once, at layer construction, so a plain closure
+  // over `opacity` would go stale after the slider moves — the mouseout
+  // handler reads this ref instead to always reset to the current value.
+  const opacityRef = useRef(opacity);
+  opacityRef.current = opacity;
+
+  // Same staleness issue for the country whose grid overlay is currently
+  // rendered on top (ch4-global) — its own tooltip would otherwise clutter
+  // the same spot as the grid's per-cell hover tooltip.
+  const suppressRef = useRef(suppressTooltipFor);
+  suppressRef.current = suppressTooltipFor;
+
   const styleFn = useCallback(
     (feature) => {
       const name = getFeatureName(feature);
@@ -666,9 +732,9 @@ function ChoroplethLayer({ geojson, stateDataMap, colKey, domain, colorStops, on
         return { fillColor: '#2a2a3a', fillOpacity: 0.5, color: '#444', weight: 0.6 };
       }
       const t = (val - domain.min) / ((domain.max - domain.min) || 1);
-      return { fillColor: stopsToColor(t, colorStops), fillOpacity: 0.8, color: '#1a1a2e', weight: 0.6 };
+      return { fillColor: stopsToColor(t, colorStops), fillOpacity: opacity, color: '#1a1a2e', weight: 0.6 };
     },
-    [stateDataMap, colKey, domain, colorStops],
+    [stateDataMap, colKey, domain, colorStops, opacity],
   );
 
   const onEachFeature = useCallback(
@@ -681,10 +747,13 @@ function ChoroplethLayer({ geojson, stateDataMap, colKey, domain, colorStops, on
         `<strong>${name}</strong><br />${val != null ? val.toFixed(3) : 'N/A'}`,
         { sticky: true },
       );
+      layer.on('tooltipopen', () => {
+        if (name === suppressRef.current) layer.closeTooltip();
+      });
       layer.on({
         click(e)     { e.originalEvent?.stopPropagation?.(); onStateClick(name); },
         mouseover(e) { e.target.setStyle({ weight: 2.5, color: '#fff', fillOpacity: 0.95 }); e.target.bringToFront(); },
-        mouseout(e)  { e.target.setStyle({ weight: 0.6, color: '#1a1a2e', fillOpacity: 0.8 }); },
+        mouseout(e)  { e.target.setStyle({ weight: 0.6, color: '#1a1a2e', fillOpacity: opacityRef.current }); },
       });
     },
     [onStateClick, stateDataMap, colKey],
@@ -863,8 +932,17 @@ export function MapView() {
   );
 
   const handleStateClick = useCallback(
-    (name) => setSelectedState(selectedState === name ? null : name),
-    [selectedState, setSelectedState],
+    (name) => {
+      // ch4-global: clicking a country always (re-)activates its grid — no
+      // toggle-off — and stays in whatever Map View mode is active, since the
+      // grid overlays on top of the choropleth rather than replacing it.
+      if (activeDataset.gridType === 'country-mask') {
+        setSelectedState(name);
+        return;
+      }
+      setSelectedState(selectedState === name ? null : name);
+    },
+    [activeDataset.gridType, selectedState, setSelectedState],
   );
 
   const { initialViewState, minZoom = 2, maxZoom = 12 } = mapConfig;
@@ -925,6 +1003,8 @@ export function MapView() {
             colKey={colKey}
             domain={choroplethDomain}
             colorStops={colorStops}
+            opacity={controls.choroplethOpacity ?? 0.65}
+            suppressTooltipFor={activeDataset.gridType === 'country-mask' ? selectedState : null}
             onStateClick={handleStateClick}
           />
         )}
@@ -939,7 +1019,6 @@ export function MapView() {
             units={display.legendUnits ?? display.units}
             onDomainReady={(d) => setJsonGridDomain(d)}
             onLoadingChange={setCountryGridLoading}
-            onDeselect={() => setSelectedState(null)}
           />
         )}
 

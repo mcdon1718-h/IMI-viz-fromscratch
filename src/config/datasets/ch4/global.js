@@ -59,6 +59,16 @@ registerDataset({
 
   controls: [
     {
+      key:     'viewMode',
+      label:   'Map View',
+      type:    'radio',
+      options: [
+        { value: 'grid',       label: 'Grid'       },
+        { value: 'choropleth', label: 'Shaded Map' },
+      ],
+      default: 'choropleth',
+    },
+    {
       key:     'satellite',
       label:   'Data Source',
       type:    'select',
@@ -92,6 +102,15 @@ registerDataset({
       default: 0.75,
       format:  v => `${Math.round(v * 100)}%`,
       visible: (controls, { selectedState }) => !!selectedState,
+    },
+    {
+      key:     'choroplethOpacity',
+      label:   'Shaded Map Opacity',
+      type:    'slider',
+      options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+      default: 0.65,
+      format:  v => `${Math.round(v * 100)}%`,
+      visible: c => c.viewMode === 'choropleth',
     },
   ],
 
