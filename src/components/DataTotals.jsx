@@ -176,12 +176,12 @@ export function DataTotals() {
 
       <div className="data-totals-table">
         <div className="dtc-label">Anthropogenic</div>
-        <NumCell value={anthroBottomUp} source="UNFCC reports" />
-        <NumCell value={anthroPost}     source="Best estimate" />
+        <NumCell value={anthroBottomUp} source="UNFCCC Reports" />
+        <NumCell value={anthroPost}     source="Best Estimate" />
 
         <div className="dtc-label">Natural</div>
-        <NumCell value={naturalBottomUp} source="various inventories" />
-        <NumCell value={naturalPost}     source="Best estimate" />
+        <NumCell value={naturalBottomUp} source="Various Inventories" />
+        <NumCell value={naturalPost}     source="Best Estimate" />
       </div>
     </div>
   );
