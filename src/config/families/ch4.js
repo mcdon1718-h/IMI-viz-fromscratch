@@ -3,7 +3,10 @@ import { registerFamily } from '../familyRegistry';
 registerFamily({
   id:          'CH4',
   name:        'Methane',
+  /*
   label:       'CH₄',
+  */
+  label:      'Library',
   dashboardTitle: 'IMI Results Dashboard', 
   description: 'Methane emissions estimates derived from satellite remote sensing observations.',
   theme: {
