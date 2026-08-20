@@ -19,11 +19,11 @@ const SECTOR_OPTIONS = [
   { value: 'Rice',        label: 'Rice'          },
   { value: 'Landfills',   label: 'Landfills'     },
   { value: 'Wastewater',  label: 'Wastewater'    },
-  { value: 'BiomassBurn', label: 'Biomass Burning' },
+  { value: 'Reservoirs',  label: 'Reservoirs'    },
   { value: 'OtherAnth',   label: 'Other Anthropogenic' },
   { value: 'Wetlands',    label: 'Wetlands'      },
-  { value: 'Natural',     label: 'Natural (Termites & Seeps)' },
-  { value: 'Reservoirs',  label: 'Reservoirs'    },
+  { value: 'BiomassBurn', label: 'Biomass Burning' },
+  { value: 'Natural',     label: 'Other Natural' },
 ];
 
 // world-countries.json (Natural Earth) identifies features by ADMIN name,
@@ -43,7 +43,10 @@ registerDataset({
   id:     'ch4-global',
   family: 'CH4',
   name:   'Global',
+  description: 'Annual methane emissions by country at 25-km resolution generated with the IMI using TROPOMI satellite data combined with bottom-up information from national BTRs. See East et al. (2025) for details.',
+  /*
   description: 'Annual anthropogenic methane emissions by country at 25 km resolution, from East et al. (2025) . Anthropogenic national emission estimates from UNFCCC reports and natural emission estimates from various inventories are corrected by inversion of TROPOMI satellite methane observations to produce best estimates of emissions.',
+  */
   citation: { text: 'East et al. (2025)', url: 'https://www.nature.com/articles/s41467-025-67122-8' },
   satellites: ['TROPOMI'],
 
@@ -74,8 +77,8 @@ registerDataset({
       type:    'select',
       group:   'selects-row',
       options: [
-        { value: 'posterior', label: 'TROPOMI-corrected' },
-        { value: 'prior',     label: 'UNFCCC Reports'   },
+        { value: 'posterior', label: 'IMI best estimate' },
+        { value: 'prior',     label: 'Bottom-up'   },
       ],
       default: 'posterior',
     },
