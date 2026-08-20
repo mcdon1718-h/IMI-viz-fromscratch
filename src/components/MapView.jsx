@@ -799,6 +799,18 @@ function StateBorderLayer({ geojson, selectedState, onStateClick }) {
   );
 }
 
+// ─── AdminBorderOverlay ────────────────────────────────────────────────────────
+// Purely decorative admin-1 outlines (e.g. US states) drawn over the global
+// choropleth. Non-interactive so clicks pass through to the country layer
+// beneath it.
+
+const ADMIN_BORDER_STYLE = { fillOpacity: 0, color: 'rgba(255,255,255,0.35)', weight: 0.5, interactive: false };
+
+function AdminBorderOverlay({ geojson }) {
+  if (!geojson) return null;
+  return <GeoJSON data={geojson} style={ADMIN_BORDER_STYLE} interactive={false} />;
+}
+
 // ─── MapView (exported) ───────────────────────────────────────────────────────
 
 export function MapView() {
@@ -982,6 +994,8 @@ export function MapView() {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           subdomains="abcd"
           maxZoom={19}
+          tileSize={512}
+          zoomOffset={-1}
         />
 
         {/* Grid hover tooltip — TIF mode only */}
@@ -1108,6 +1122,14 @@ export function MapView() {
             gridMeta={activeUploadSector?.gridMeta}
             values={activeJsonGridValues}
             units={uploadedData.meta?.units || (display.legendUnits ?? display.units)}
+          />
+        )}
+
+        {/* US state outlines (global map only) — decorative, non-interactive */}
+        {activeDataset.gridType === 'country-mask' && baseData?.usStatesGeoJSON && (
+          <AdminBorderOverlay
+            key={`admin-borders-${activeDataset.id}`}
+            geojson={baseData.usStatesGeoJSON}
           />
         )}
 

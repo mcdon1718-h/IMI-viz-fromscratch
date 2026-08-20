@@ -363,6 +363,7 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
 /* Map */
 .map-wrapper          { position: absolute; inset: 0; }
 .map-container        { width: 100%; height: 100%; }
+.map-container .leaflet-tile-pane { filter: brightness(1.3) contrast(1.05); }
 .map-overlay          { position: absolute; top: 1rem; left: 50%; transform: translateX(-50%);
                         padding: .45rem 1rem; border-radius: 8px; font-size: .82rem;
                         pointer-events: none; z-index: 10; white-space: nowrap; }

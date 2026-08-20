@@ -113,7 +113,6 @@ registerDataset({
       options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
       default: 0.65,
       format:  v => `${Math.round(v * 100)}%`,
-      visible: c => c.viewMode === 'choropleth',
     },
   ],
 
@@ -134,10 +133,14 @@ registerDataset({
   },
 
   async dataLoader() {
-    const [rows, countriesGeoJSON] = await Promise.all([
+    const [rows, countriesGeoJSON, usStatesGeoJSON] = await Promise.all([
       fetchCSV(`${import.meta.env.BASE_URL}data/emissions_data3.csv`),
       fetch(`${import.meta.env.BASE_URL}data/world-countries.json`).then(r => {
         if (!r.ok) throw new Error(`world-countries.json: HTTP ${r.status}`);
+        return r.json();
+      }),
+      fetch(`${import.meta.env.BASE_URL}data/ne/us_states_simplified.geojson`).then(r => {
+        if (!r.ok) throw new Error(`us_states_simplified.geojson: HTTP ${r.status}`);
         return r.json();
       }),
     ]);
@@ -199,9 +202,10 @@ registerDataset({
       nationalPosterior: { [YEAR]: worldPosterior },
       nationalPrior:     { [YEAR]: worldPrior },
       stateByYearPrior,
-      sectorKeys:    BAR_SECTOR_KEYS,
-      statesGeoJSON: countriesGeoJSON,
-      manifest:      null,
+      sectorKeys:      BAR_SECTOR_KEYS,
+      statesGeoJSON:   countriesGeoJSON,
+      usStatesGeoJSON,
+      manifest:        null,
     };
   },
 });
