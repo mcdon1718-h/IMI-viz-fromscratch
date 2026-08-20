@@ -4,15 +4,20 @@ import { useEmissionData }         from '../hooks/useEmissionData';
 import { getGlobalDomain, getPeriodGlobalDomain } from '../utils/manifestUtils';
 import { computeChoroplethDomain } from '../utils/emissionsUtils';
 
-const GRADIENT = `linear-gradient(to right,
-  #ffffcc, #ffeda0, #fed976, #feb24c,
-  #fd8d3c, #fc4e2a, #e31a1c, #bd0026, #800026)`;
+function buildGradient(stops) {
+  if (!stops?.length) return 'none';
+  const [min, max] = [stops[0][0], stops[stops.length - 1][0]];
+  const span = max - min || 1;
+  const stopStrings = stops.map(([v, color]) => `${color} ${((v - min) / span) * 100}%`);
+  return `linear-gradient(to right, ${stopStrings.join(', ')})`;
+}
 
 export function Legend() {
   const { activeDataset, controls, selectedState, jsonGridDomain, uploadedData } = useDatasetContext();
   const { data: baseData }                          = useEmissionData();
   const { display }                                 = activeDataset;
   const isUpload = activeDataset.id === 'user-upload';
+  const gradient = useMemo(() => buildGradient(display.colorScale?.stops), [display.colorScale]);
 
   // ch4-global has no viewMode control — its "grid" is the masked per-country
   // overlay, active only once a country is selected.
@@ -72,7 +77,7 @@ export function Legend() {
           {isGrid ? 'Grid' : 'Choropleth'}
         </span>
       </div>
-      <div className="legend-gradient" style={{ background: GRADIENT }} />
+      <div className="legend-gradient" style={{ background: gradient }} />
       <div className="legend-ticks">
         <span>{domain ? fmt(domain.min) : '0'}</span>
         <span>{domain ? fmt(domain.max) : '—'}</span>
