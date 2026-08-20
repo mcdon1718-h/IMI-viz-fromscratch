@@ -17,7 +17,7 @@ export function getFamily(id) {
 }
 
 export function getAllFamilies() {
-  return [...familyRegistry.values()];
+  return [...familyRegistry.values()].filter((f) => f.enabled !== false);
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────

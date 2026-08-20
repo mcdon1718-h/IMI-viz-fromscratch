@@ -58,7 +58,7 @@ registerDataset({
   },
 
   controls: [
-    {
+    /*{
       key:     'viewMode',
       label:   'Map View',
       type:    'radio',
@@ -67,7 +67,7 @@ registerDataset({
         { value: 'choropleth', label: 'Shaded Map' },
       ],
       default: 'choropleth',
-    },
+    },*/
     {
       key:     'satellite',
       label:   'Data Source',

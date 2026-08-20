@@ -137,7 +137,7 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
 /* ── Dataset family + satellite badges (sidebar) ──────────────────────────────── */
 
 .dataset-badge-row {
-  display:          flex;
+  display:          none; /* temporarily hidden — set back to flex to re-enable */
   align-items:      center;
   flex-wrap:        wrap;
   gap:              .35rem;
