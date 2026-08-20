@@ -43,8 +43,6 @@ export function UploadPanel() {
     uploadedData, setUploadedData, clearUploadedData,
     setJsonGridDomain, controls, setControl,
   } = useDatasetContext();
-  const [name, setName]             = useState('');
-  const [units, setUnits]           = useState('');
   const [sectorName, setSectorName] = useState('');
   const [error, setError]           = useState(null);
 
@@ -81,8 +79,8 @@ export function UploadPanel() {
       return;
     }
 
-    const metaName  = name.trim()  || uploadedData?.meta?.name  || null;
-    const metaUnits = units.trim() || uploadedData?.meta?.units || null;
+    const metaName  = uploadedData?.meta?.name  || null;
+    const metaUnits = uploadedData?.meta?.units || null;
 
     if (isRaster) {
       const sectorKey = sectorName.trim() || stripExtension(file.name);
@@ -185,7 +183,7 @@ export function UploadPanel() {
     setControl('sector', sectorKey);
     setSectorName('');
   }, [
-    name, units, sectorName, uploadedData, sectors, usedBytes,
+    sectorName, uploadedData, sectors, usedBytes,
     setUploadedData, setJsonGridDomain, setControl,
   ]);
 
@@ -294,28 +292,6 @@ export function UploadPanel() {
   return (
     <div className="upload-panel">
       <span className="upload-panel-title">Upload Your Data</span>
-
-      <div className="upload-field">
-        <label className="control-label">Display name</label>
-        <input
-          type="text"
-          className="upload-text-input"
-          placeholder="e.g. CONUS IMI Output"
-          value={name}
-          onChange={e => setName(e.target.value)}
-        />
-      </div>
-
-      <div className="upload-field">
-        <label className="control-label">Units label</label>
-        <input
-          type="text"
-          className="upload-text-input"
-          placeholder="e.g. kg km⁻² h⁻¹"
-          value={units}
-          onChange={e => setUnits(e.target.value)}
-        />
-      </div>
 
       <div className="upload-field">
         <label className="control-label">Sector name (optional)</label>
