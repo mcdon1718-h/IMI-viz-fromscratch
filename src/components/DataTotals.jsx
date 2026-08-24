@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { useDatasetContext } from '../context/DatasetContext';
 import { useEmissionData }   from '../hooks/useEmissionData';
 import { useDisplayUnit }    from '../hooks/useDisplayUnit';
+import { formatMassValue }   from '../utils/units';
 import { parseNumber }       from '../utils/emissionsUtils';
 import { PERMIAN_TOTAL_VARIABLE, getPeriodAnthroTotal } from '../utils/manifestUtils';
 
@@ -137,16 +138,7 @@ export function DataTotals() {
 
   if (!SUPPORTED.has(activeDataset.id) || !baseData) return null;
 
-  // Large units (e.g. Tons) push values into the hundreds of millions — a
-  // fully expanded, grouped number is both hard to read and too wide for
-  // the sidebar (it's a single unbreakable token, so it can only overflow,
-  // not wrap). Compact notation (329.26M) keeps it short in any unit.
-  const fmt = v => {
-    if (v == null || !Number.isFinite(v)) return '—';
-    return Math.abs(v) >= 1000
-      ? new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(v)
-      : v.toFixed(2);
-  };
+  const fmt = formatMassValue;
 
   // Natural = Total minus Anthropogenic, derived rather than sourced directly
   // — every branch above already computes both, so this needs no per-dataset case.

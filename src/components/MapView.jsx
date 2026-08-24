@@ -15,6 +15,8 @@ import parseGeoraster        from 'georaster';
 import GeoRasterLayer        from 'georaster-layer-for-leaflet';
 import { useDatasetContext } from '../context/DatasetContext';
 import { useEmissionData }   from '../hooks/useEmissionData';
+import { useDisplayUnit }    from '../hooks/useDisplayUnit';
+import { formatMassValue }   from '../utils/units';
 import {
   getManifestEntry,
   getGlobalDomain,
@@ -572,8 +574,9 @@ function cellBBox(geometry) {
   return Number.isFinite(minLat) ? { minLat, maxLat, minLon, maxLon } : null;
 }
 
-function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady, onLoadingChange }) {
+function CountryGridLayer({ filePath, colorStops, opacity, onDomainReady, onLoadingChange }) {
   const map = useMap();
+  const { convert, label: units } = useDisplayUnit();
   const layerRef = useRef(null);
   const rendererRef = useRef(null);
   const styleRef = useRef({ colorStops, opacity, domainMax: 1 });
@@ -608,10 +611,22 @@ function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady,
         const domainMax = values.length ? Math.max(...values) : 0;
         styleRef.current.domainMax = domainMax || 1;
 
+        // emissions_min / emissions_max are an optional per-cell uncertainty
+        // extension to the standard {emissions} feature schema — absent from
+        // today's masked.json files, so hover falls back to the bare value
+        // until a file carrying them is dropped in (same directory, same
+        // feature order, no other code changes needed).
         cellsRef.current = (data.features ?? [])
           .map(f => {
             const box = cellBBox(f.geometry);
-            return box && { ...box, value: f.properties?.emissions };
+            if (!box) return null;
+            const p = f.properties ?? {};
+            return {
+              ...box,
+              value: p.emissions,
+              min: Number.isFinite(p.emissions_min) ? p.emissions_min : null,
+              max: Number.isFinite(p.emissions_max) ? p.emissions_max : null,
+            };
           })
           .filter(Boolean);
 
@@ -685,7 +700,7 @@ function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady,
         c => lat >= c.minLat && lat <= c.maxLat && lng >= c.minLon && lng <= c.maxLon,
       );
       if (!hit || hit.value == null) { setHover(null); return; }
-      setHover({ point: e.containerPoint, value: hit.value });
+      setHover({ point: e.containerPoint, value: hit.value, min: hit.min, max: hit.max });
     },
     mouseout()  { setHover(null); },
     dragstart() { setHover(null); },
@@ -693,12 +708,23 @@ function CountryGridLayer({ filePath, colorStops, opacity, units, onDomainReady,
 
   if (!hover) return null;
 
+  const value = convert(hover.value);
+  const min   = convert(hover.min);
+  const max   = convert(hover.max);
+  // Same ± convention as the sector chart's uncertainty, collapsed to a
+  // single figure: the larger of the two (possibly asymmetric) deltas
+  // around the central value, rather than their average.
+  const spread = (min != null && max != null)
+    ? Math.max(0, value - min, max - value)
+    : null;
+
   return createPortal(
     <div
       className="grid-hover-tooltip"
       style={{ left: hover.point.x + 14, top: hover.point.y }}
     >
-      {hover.value.toFixed(5)}
+      {formatMassValue(value)}
+      {spread != null && <span className="grid-hover-spread"> ± {formatMassValue(spread)}</span>}
       {units && <span className="grid-hover-units"> {units}</span>}
     </div>,
     map.getContainer(),
@@ -1030,7 +1056,6 @@ export function MapView() {
             filePath={countryGridFilePath}
             colorStops={colorStops}
             opacity={controls.opacity ?? 0.75}
-            units={display.legendUnits ?? display.units}
             onDomainReady={(d) => setJsonGridDomain(d)}
             onLoadingChange={setCountryGridLoading}
           />
