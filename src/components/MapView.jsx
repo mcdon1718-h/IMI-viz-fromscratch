@@ -16,7 +16,7 @@ import GeoRasterLayer        from 'georaster-layer-for-leaflet';
 import { useDatasetContext } from '../context/DatasetContext';
 import { useEmissionData }   from '../hooks/useEmissionData';
 import { useDisplayUnit }    from '../hooks/useDisplayUnit';
-import { formatMassValue }   from '../utils/units';
+import { formatMassValue, convertMass } from '../utils/units';
 import {
   getManifestEntry,
   getGlobalDomain,
@@ -262,6 +262,77 @@ function useJsonMinMax(url) {
   }, [url]);
 
   return minMax;
+}
+
+// ─── useGlobalEnsembleMinMax (ch4-global hover uncertainty) ───────────────────
+// ch4-global has no per-sector/year ensemble rasters like CONUS — instead
+// there's one gzipped JSON covering the whole world at the model's native
+// 0.25°x0.3125° resolution, for every sector at once. This fetches it once,
+// keeps only the Total/posterior variable the country-mask grid actually
+// displays, and reshapes its sparse per-cell arrays into the same dense
+// {gridMeta, values} shape Colombia's hover already consumes — so the lookup
+// itself is just getValueAtLatLngFromGrid, same as Colombia.
+const ENSEMBLE_MINMAX_URL = `${import.meta.env.BASE_URL}data/ch4_global/ensemble_minmax.json.gz`;
+const ENSEMBLE_VARIABLE   = 'EmisCH4_Total_post';
+
+// Fetched once per session and cached at module scope — CountryGridLayer
+// remounts (new `key`) on every country switch, but that should never
+// re-trigger a 20MB fetch + decompress + parse of a file whose content
+// never changes.
+let ensembleMinMaxPromise = null;
+
+function useGlobalEnsembleMinMax() {
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!ensembleMinMaxPromise) {
+      ensembleMinMaxPromise = fetch(ENSEMBLE_MINMAX_URL)
+        .then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status} — ${ENSEMBLE_MINMAX_URL}`);
+          // A static host serving this .gz as opaque bytes (no Content-Encoding
+          // header) hands us the raw gzip stream, so we decompress it ourselves.
+          // Vite's dev server instead declares Content-Encoding: gzip and the
+          // browser already transparently decodes it before we ever see the
+          // body — decompressing again there would choke on plain JSON text.
+          const alreadyDecoded = r.headers.get('content-encoding') === 'gzip';
+          return alreadyDecoded
+            ? r.text()
+            : new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).text();
+        })
+        .then(text => {
+          const raw = JSON.parse(text);
+          const { lat: lats, lon: lons } = raw.grid;
+          const nlon = lons.length;
+          const { lat_index: latIdx, lon_index: lonIdx } = raw.cells;
+          const { min, max } = raw.data[ENSEMBLE_VARIABLE];
+
+          // Raw file is "Gg yr-1 per grid cell"; the country-mask grid it
+          // annotates (country_emissions/*.json → `emissions`) is Tg.
+          const ggToTg = convertMass(1, 'Gg', 'Tg');
+
+          const minValues = new Float64Array(lats.length * nlon).fill(NaN);
+          const maxValues = new Float64Array(lats.length * nlon).fill(NaN);
+          for (let i = 0; i < latIdx.length; i++) {
+            const idx = latIdx[i] * nlon + lonIdx[i];
+            minValues[idx] = min[i] * ggToTg;
+            maxValues[idx] = max[i] * ggToTg;
+          }
+          return { gridMeta: { lats, lons }, minValues, maxValues };
+        })
+        .catch(err => {
+          console.error('[useGlobalEnsembleMinMax] load error:', err.message);
+          ensembleMinMaxPromise = null; // allow a retry on next mount rather than caching the failure
+          return null;
+        });
+    }
+
+    ensembleMinMaxPromise.then(r => { if (!cancelled) setResult(r); });
+    return () => { cancelled = true; };
+  }, []);
+
+  return result;
 }
 
 // ─── JsonGridHoverLayer ───────────────────────────────────────────────────────
@@ -577,6 +648,7 @@ function cellBBox(geometry) {
 function CountryGridLayer({ filePath, colorStops, opacity, onDomainReady, onLoadingChange }) {
   const map = useMap();
   const { convert, label: units } = useDisplayUnit();
+  const ensembleMinMax = useGlobalEnsembleMinMax();
   const layerRef = useRef(null);
   const rendererRef = useRef(null);
   const styleRef = useRef({ colorStops, opacity, domainMax: 1 });
@@ -611,22 +683,10 @@ function CountryGridLayer({ filePath, colorStops, opacity, onDomainReady, onLoad
         const domainMax = values.length ? Math.max(...values) : 0;
         styleRef.current.domainMax = domainMax || 1;
 
-        // emissions_min / emissions_max are an optional per-cell uncertainty
-        // extension to the standard {emissions} feature schema — absent from
-        // today's masked.json files, so hover falls back to the bare value
-        // until a file carrying them is dropped in (same directory, same
-        // feature order, no other code changes needed).
         cellsRef.current = (data.features ?? [])
           .map(f => {
             const box = cellBBox(f.geometry);
-            if (!box) return null;
-            const p = f.properties ?? {};
-            return {
-              ...box,
-              value: p.emissions,
-              min: Number.isFinite(p.emissions_min) ? p.emissions_min : null,
-              max: Number.isFinite(p.emissions_max) ? p.emissions_max : null,
-            };
+            return box && { ...box, value: f.properties?.emissions };
           })
           .filter(Boolean);
 
@@ -700,7 +760,21 @@ function CountryGridLayer({ filePath, colorStops, opacity, onDomainReady, onLoad
         c => lat >= c.minLat && lat <= c.maxLat && lng >= c.minLon && lng <= c.maxLon,
       );
       if (!hit || hit.value == null) { setHover(null); return; }
-      setHover({ point: e.containerPoint, value: hit.value, min: hit.min, max: hit.max });
+
+      // The country-mask cell and the ensemble grid are both 0.25°x0.3125°
+      // but not perfectly co-registered — look up by this cell's own center
+      // rather than the raw cursor position, and let getValueAtLatLngFromGrid's
+      // half-cell tolerance absorb the small offset between the two grids.
+      const centerLat = (hit.minLat + hit.maxLat) / 2;
+      const centerLon = (hit.minLon + hit.maxLon) / 2;
+      const min = ensembleMinMax
+        ? getValueAtLatLngFromGrid(ensembleMinMax.gridMeta, ensembleMinMax.minValues, centerLat, centerLon, { allowZero: true })
+        : null;
+      const max = ensembleMinMax
+        ? getValueAtLatLngFromGrid(ensembleMinMax.gridMeta, ensembleMinMax.maxValues, centerLat, centerLon, { allowZero: true })
+        : null;
+
+      setHover({ point: e.containerPoint, value: hit.value, min, max });
     },
     mouseout()  { setHover(null); },
     dragstart() { setHover(null); },
