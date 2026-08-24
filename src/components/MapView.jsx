@@ -267,19 +267,60 @@ function useJsonMinMax(url) {
 // ─── useGlobalEnsembleMinMax (ch4-global hover uncertainty) ───────────────────
 // ch4-global has no per-sector/year ensemble rasters like CONUS — instead
 // there's one gzipped JSON covering the whole world at the model's native
-// 0.25°x0.3125° resolution, for every sector at once. This fetches it once,
-// keeps only the Total/posterior variable the country-mask grid actually
-// displays, and reshapes its sparse per-cell arrays into the same dense
-// {gridMeta, values} shape Colombia's hover already consumes — so the lookup
-// itself is just getValueAtLatLngFromGrid, same as Colombia.
+// 0.25°x0.3125° resolution, for every sector at once. This fetches it once
+// and reshapes the sectors the Sector dropdown can select into dense
+// {gridMeta, values} pairs — same shape Colombia's hover already consumes,
+// so the lookup itself is just getValueAtLatLngFromGrid, same as Colombia.
+//
+// The file only ships "_post" (posterior) variables — no ensemble exists for
+// the bottom-up/prior estimate — so there's nothing to look up when the Data
+// Source control is set to prior; callers should treat a null result as
+// "no uncertainty available" rather than an error.
+//
+// TotalAnth and Natural aren't native ensemble variables, so their spread is
+// approximated by summing the constituent sectors' min/max element-wise —
+// the same aggregation rule the per-country data files use for the central
+// value (see build_country_sector_grids.py's `aggregates`), just applied to
+// the bounds instead of the estimate. Summing independent bounds like this
+// is a worst-case approximation (assumes every sector errs the same
+// direction at once), not a statistically rigorous propagation — reasonable
+// for a hover tooltip, but worth knowing if this number is ever used for
+// anything more rigorous.
 const ENSEMBLE_MINMAX_URL = `${import.meta.env.BASE_URL}data/ch4_global/ensemble_minmax.json.gz`;
-const ENSEMBLE_VARIABLE   = 'EmisCH4_Total_post';
+
+// Native ensemble variable name -> the Sector dropdown value it corresponds
+// to (see global.js's SECTOR_OPTIONS). Only OG/OilAndGas differ in spelling.
+const NATIVE_SECTOR_TO_CONTROL = {
+  BiomassBurn: 'BiomassBurn',
+  Coal:        'Coal',
+  Landfills:   'Landfills',
+  Livestock:   'Livestock',
+  OG:          'OilAndGas',
+  OtherAnth:   'OtherAnth',
+  Rice:        'Rice',
+  Wastewater:  'Wastewater',
+  Reservoirs:  'Reservoirs',
+  Wetlands:    'Wetlands',
+};
+// Termites + Seeps aren't independently selectable — only needed to derive Natural.
+const NATIVE_SECTORS_NEEDED = [...Object.keys(NATIVE_SECTOR_TO_CONTROL), 'Termites', 'Seeps'];
+// Mirrors build_country_sector_grids.py's `aggregates` (TotalAnth excludes Wetlands).
+const TOTAL_ANTH_SECTORS = ['BiomassBurn', 'Coal', 'Landfills', 'Livestock', 'OG', 'OtherAnth', 'Rice', 'Wastewater', 'Reservoirs'];
+const NATURAL_SECTORS    = ['Termites', 'Seeps'];
 
 // Fetched once per session and cached at module scope — CountryGridLayer
 // remounts (new `key`) on every country switch, but that should never
 // re-trigger a 20MB fetch + decompress + parse of a file whose content
 // never changes.
 let ensembleMinMaxPromise = null;
+
+function sumDense(length, arrays) {
+  const out = new Float32Array(length);
+  for (const arr of arrays) {
+    for (let i = 0; i < length; i++) out[i] += arr[i];
+  }
+  return out;
+}
 
 function useGlobalEnsembleMinMax() {
   const [result, setResult] = useState(null);
@@ -304,22 +345,43 @@ function useGlobalEnsembleMinMax() {
         .then(text => {
           const raw = JSON.parse(text);
           const { lat: lats, lon: lons } = raw.grid;
-          const nlon = lons.length;
+          const nlon   = lons.length;
+          const length = lats.length * nlon;
           const { lat_index: latIdx, lon_index: lonIdx } = raw.cells;
-          const { min, max } = raw.data[ENSEMBLE_VARIABLE];
 
           // Raw file is "Gg yr-1 per grid cell"; the country-mask grid it
-          // annotates (country_emissions/*.json → `emissions`) is Tg.
+          // annotates (country_sectors/*.json → emissions_<Sector>_post) is Tg.
           const ggToTg = convertMass(1, 'Gg', 'Tg');
 
-          const minValues = new Float64Array(lats.length * nlon).fill(NaN);
-          const maxValues = new Float64Array(lats.length * nlon).fill(NaN);
-          for (let i = 0; i < latIdx.length; i++) {
-            const idx = latIdx[i] * nlon + lonIdx[i];
-            minValues[idx] = min[i] * ggToTg;
-            maxValues[idx] = max[i] * ggToTg;
+          const denseBySector = {}; // native sector name -> {minValues, maxValues}
+          for (const sector of NATIVE_SECTORS_NEEDED) {
+            const { min, max } = raw.data[`EmisCH4_${sector}_post`] ?? {};
+            const minValues = new Float32Array(length).fill(NaN);
+            const maxValues = new Float32Array(length).fill(NaN);
+            if (min && max) {
+              for (let i = 0; i < latIdx.length; i++) {
+                const idx = latIdx[i] * nlon + lonIdx[i];
+                minValues[idx] = min[i] * ggToTg;
+                maxValues[idx] = max[i] * ggToTg;
+              }
+            }
+            denseBySector[sector] = { minValues, maxValues };
           }
-          return { gridMeta: { lats, lons }, minValues, maxValues };
+
+          const bySector = {};
+          for (const [native, controlValue] of Object.entries(NATIVE_SECTOR_TO_CONTROL)) {
+            bySector[controlValue] = denseBySector[native];
+          }
+          bySector.TotalAnth = {
+            minValues: sumDense(length, TOTAL_ANTH_SECTORS.map(s => denseBySector[s].minValues)),
+            maxValues: sumDense(length, TOTAL_ANTH_SECTORS.map(s => denseBySector[s].maxValues)),
+          };
+          bySector.Natural = {
+            minValues: sumDense(length, NATURAL_SECTORS.map(s => denseBySector[s].minValues)),
+            maxValues: sumDense(length, NATURAL_SECTORS.map(s => denseBySector[s].maxValues)),
+          };
+
+          return { gridMeta: { lats, lons }, bySector };
         })
         .catch(err => {
           console.error('[useGlobalEnsembleMinMax] load error:', err.message);
@@ -645,22 +707,50 @@ function cellBBox(geometry) {
   return Number.isFinite(minLat) ? { minLat, maxLat, minLon, maxLon } : null;
 }
 
+// Sector dropdown value -> the country_sectors/*.json property key holding
+// that sector's estimate. Only OilAndGas/OG differ in spelling; TotalAnth
+// and Natural are shipped precomputed under the same rule the ensemble
+// aggregation above mirrors, so no frontend summing is needed for the value.
+const CONTROL_SECTOR_TO_FILE_KEY = { OilAndGas: 'OG' };
+
+function emissionsPropertyKey(sector, satellite) {
+  const key = CONTROL_SECTOR_TO_FILE_KEY[sector] ?? sector;
+  return `emissions_${key}_${satellite === 'prior' ? 'prior' : 'post'}`;
+}
+
+// Cells omit zero-valued sector keys entirely (most cells are dominated by
+// 1-2 sectors), so a missing key is a real, meaningful zero — not missing data.
+function readEmissions(properties, propertyKey) {
+  return properties?.[propertyKey] ?? 0;
+}
+
+function domainMaxFor(features, propertyKey) {
+  let max = 0;
+  for (const f of features) {
+    const v = readEmissions(f.properties, propertyKey);
+    if (v > max) max = v;
+  }
+  return max;
+}
+
 function CountryGridLayer({ filePath, colorStops, opacity, onDomainReady, onLoadingChange }) {
   const map = useMap();
+  const { controls } = useDatasetContext();
   const { convert, label: units } = useDisplayUnit();
   const ensembleMinMax = useGlobalEnsembleMinMax();
   const layerRef = useRef(null);
   const rendererRef = useRef(null);
-  const styleRef = useRef({ colorStops, opacity, domainMax: 1 });
+  const styleRef = useRef({ colorStops, opacity, domainMax: 1, propertyKey: 'emissions_TotalAnth_post' });
   styleRef.current.colorStops = colorStops;
   styleRef.current.opacity = opacity;
   const cellsRef = useRef([]);
+  const featuresRef = useRef([]);
   const [hover, setHover] = useState(null);
 
   const styleFeature = useCallback((feature) => {
-    const { colorStops: cs, opacity: op, domainMax: dm } = styleRef.current;
-    const v = feature.properties?.emissions;
-    const t = (v != null && dm > 0) ? Math.max(0, Math.min(1, v / dm)) : 0;
+    const { colorStops: cs, opacity: op, domainMax: dm, propertyKey } = styleRef.current;
+    const v = readEmissions(feature.properties, propertyKey);
+    const t = dm > 0 ? Math.max(0, Math.min(1, v / dm)) : 0;
     return { color: 'transparent', weight: 0, fillColor: stopsToColor(t, cs), fillOpacity: op };
   }, []);
 
@@ -677,16 +767,18 @@ function CountryGridLayer({ filePath, colorStops, opacity, onDomainReady, onLoad
       .then(data => {
         if (cancelled) return;
 
-        const values = (data.features ?? [])
-          .map(f => f.properties?.emissions)
-          .filter(v => v != null && Number.isFinite(v));
-        const domainMax = values.length ? Math.max(...values) : 0;
-        styleRef.current.domainMax = domainMax || 1;
+        const features = data.features ?? [];
+        featuresRef.current = features;
 
-        cellsRef.current = (data.features ?? [])
+        const propertyKey = emissionsPropertyKey(controls.sector, controls.satellite);
+        const domainMax    = domainMaxFor(features, propertyKey);
+        styleRef.current.propertyKey = propertyKey;
+        styleRef.current.domainMax   = domainMax || 1;
+
+        cellsRef.current = features
           .map(f => {
             const box = cellBBox(f.geometry);
-            return box && { ...box, value: f.properties?.emissions };
+            return box && { ...box, properties: f.properties };
           })
           .filter(Boolean);
 
@@ -742,6 +834,7 @@ function CountryGridLayer({ filePath, colorStops, opacity, onDomainReady, onLoad
         rendererRef.current = null;
       }
       cellsRef.current = [];
+      featuresRef.current = [];
       setHover(null);
       onDomainReady?.(null);
       onLoadingChange?.(false);
@@ -753,28 +846,46 @@ function CountryGridLayer({ filePath, colorStops, opacity, onDomainReady, onLoad
     if (layerRef.current) layerRef.current.setStyle(styleFeature);
   }, [colorStops, opacity, styleFeature]);
 
+  // Sector/estimate are all bundled in the one file already fetched above —
+  // switching them just re-derives the color domain and restyles in place,
+  // no refetch.
+  useEffect(() => {
+    if (!layerRef.current || !featuresRef.current.length) return;
+    const propertyKey = emissionsPropertyKey(controls.sector, controls.satellite);
+    const domainMax    = domainMaxFor(featuresRef.current, propertyKey);
+    styleRef.current.propertyKey = propertyKey;
+    styleRef.current.domainMax   = domainMax || 1;
+    layerRef.current.setStyle(styleFeature);
+    onDomainReady?.(domainMax > 0 ? { min: 0, max: domainMax } : null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controls.sector, controls.satellite, styleFeature]);
+
   useMapEvents({
     mousemove(e) {
       const { lat, lng } = e.latlng;
       const hit = cellsRef.current.find(
         c => lat >= c.minLat && lat <= c.maxLat && lng >= c.minLon && lng <= c.maxLon,
       );
-      if (!hit || hit.value == null) { setHover(null); return; }
+      if (!hit) { setHover(null); return; }
 
-      // The country-mask cell and the ensemble grid are both 0.25°x0.3125°
-      // but not perfectly co-registered — look up by this cell's own center
-      // rather than the raw cursor position, and let getValueAtLatLngFromGrid's
-      // half-cell tolerance absorb the small offset between the two grids.
-      const centerLat = (hit.minLat + hit.maxLat) / 2;
-      const centerLon = (hit.minLon + hit.maxLon) / 2;
-      const min = ensembleMinMax
-        ? getValueAtLatLngFromGrid(ensembleMinMax.gridMeta, ensembleMinMax.minValues, centerLat, centerLon, { allowZero: true })
-        : null;
-      const max = ensembleMinMax
-        ? getValueAtLatLngFromGrid(ensembleMinMax.gridMeta, ensembleMinMax.maxValues, centerLat, centerLon, { allowZero: true })
-        : null;
+      const propertyKey = emissionsPropertyKey(controls.sector, controls.satellite);
+      const value = readEmissions(hit.properties, propertyKey);
 
-      setHover({ point: e.containerPoint, value: hit.value, min, max });
+      // The file's grid and the ensemble's grid are both the native
+      // 0.25°x0.3125° model grid, but look up by this cell's own center
+      // rather than the raw cursor position — getValueAtLatLngFromGrid's
+      // half-cell tolerance is cheap insurance against any residual offset.
+      // Ensemble uncertainty only exists for the posterior estimate.
+      const sectorMinMax = controls.satellite === 'posterior' ? ensembleMinMax?.bySector[controls.sector] : null;
+      let min = null, max = null;
+      if (sectorMinMax) {
+        const centerLat = (hit.minLat + hit.maxLat) / 2;
+        const centerLon = (hit.minLon + hit.maxLon) / 2;
+        min = getValueAtLatLngFromGrid(ensembleMinMax.gridMeta, sectorMinMax.minValues, centerLat, centerLon, { allowZero: true });
+        max = getValueAtLatLngFromGrid(ensembleMinMax.gridMeta, sectorMinMax.maxValues, centerLat, centerLon, { allowZero: true });
+      }
+
+      setHover({ point: e.containerPoint, value, min, max });
     },
     mouseout()  { setHover(null); },
     dragstart() { setHover(null); },
@@ -1001,7 +1112,7 @@ export function MapView() {
   // ── Per-country masked grid file path (ch4-global) ────────────────────────
   const countryGridFilePath = useMemo(() => {
     if (activeDataset.gridType !== 'country-mask' || !selectedState) return null;
-    return `${import.meta.env.BASE_URL}data/ch4_global/country_emissions/${encodeURIComponent(selectedState.replace(/ /g, '_'))}_masked.json`;
+    return `${import.meta.env.BASE_URL}data/ch4_global/country_sectors/${encodeURIComponent(selectedState.replace(/ /g, '_'))}_masked.json`;
   }, [activeDataset.gridType, selectedState]);
 
   // ── Raster/grid domain ────────────────────────────────────────────────────
