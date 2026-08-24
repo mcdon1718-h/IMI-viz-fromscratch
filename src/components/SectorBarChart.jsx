@@ -12,6 +12,7 @@ import {
 }                                  from 'recharts';
 import { useDatasetContext }        from '../context/DatasetContext';
 import { useEmissionData }          from '../hooks/useEmissionData';
+import { useDisplayUnit }           from '../hooks/useDisplayUnit';
 import {
   buildBarData,
   buildBottomUpBarData,
@@ -120,6 +121,7 @@ function SectorBarCustomTooltip({
 export function SectorBarChart() {
   const { activeDataset, activeFamily, controls, selectedState, uploadedData } = useDatasetContext();
   const { data: baseData, loading } = useEmissionData();
+  const { label: displayUnits, convert } = useDisplayUnit();
 
   if (activeDataset.id === 'user-upload') {
     const sectors    = uploadedData?.sectors ?? {};
@@ -192,8 +194,8 @@ export function SectorBarChart() {
 
     const chartData = post.labels.map((sector, i) => ({
       sector,
-      value:         post.values[i]  != null ? post.values[i]  / KG_TO_GG : null,
-      bottomUpValue: prior.values[i] != null ? prior.values[i] / KG_TO_GG : null,
+      value:         post.values[i]  != null ? convert(post.values[i]  / KG_TO_GG) : null,
+      bottomUpValue: prior.values[i] != null ? convert(prior.values[i] / KG_TO_GG) : null,
     }));
 
     return (
@@ -201,7 +203,7 @@ export function SectorBarChart() {
         <div className="chart-header">
           <span className="chart-title">Sector Breakdown</span>
           <span className="chart-year">{weekStart}</span>
-          <span className="chart-units">{activeDataset.display.units}</span>
+          <span className="chart-units">{displayUnits}</span>
         </div>
 
         <ResponsiveContainer width="100%" height={320}>
@@ -228,7 +230,7 @@ export function SectorBarChart() {
             <Tooltip
               content={
                 <SectorBarCustomTooltip
-                  units={activeDataset.display.units}
+                  units={displayUnits}
                   accent={accent}
                   showUncertainty={false}
                   showBottomUp
@@ -279,17 +281,17 @@ export function SectorBarChart() {
 
   const chartData = barData.labels.map((key, i) => ({
     sector:        labelSector(key),
-    value:         barData.values[i],
+    value:         convert(barData.values[i]),
     errorRange:    showUncertainty && barData.mins[i] != null
-      ? [barData.mins[i], barData.maxs[i]]
+      ? [convert(barData.mins[i]), convert(barData.maxs[i])]
       : null,
     errorDelta:    showUncertainty && barData.mins[i] != null && barData.values[i] != null
       ? [
-          Math.max(0, barData.values[i] - barData.mins[i]),
-          Math.max(0, barData.maxs[i]   - barData.values[i]),
+          Math.max(0, convert(barData.values[i] - barData.mins[i])),
+          Math.max(0, convert(barData.maxs[i]   - barData.values[i])),
         ]
       : null,
-    bottomUpValue: showBottomUp ? (bottomUpData?.values[i] ?? null) : null,
+    bottomUpValue: showBottomUp ? convert(bottomUpData?.values[i] ?? null) : null,
   }));
 
   return (
@@ -298,7 +300,7 @@ export function SectorBarChart() {
         <span className="chart-title">Sector Breakdown</span>
         <span className="chart-place">{placeLabel}</span>
         <span className="chart-year">{controls.year}</span>
-        <span className="chart-units">{activeDataset.display.units}</span>
+        <span className="chart-units">{displayUnits}</span>
         {loading && <span className="chart-status">Loading…</span>}
       </div>
 
@@ -331,7 +333,7 @@ export function SectorBarChart() {
           <Tooltip
             content={
               <SectorBarCustomTooltip
-                units={activeDataset.display.units}
+                units={displayUnits}
                 accent={accent}
                 showUncertainty={showUncertainty}
                 showBottomUp={showBottomUp}

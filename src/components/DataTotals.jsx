@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useDatasetContext } from '../context/DatasetContext';
 import { useEmissionData }   from '../hooks/useEmissionData';
+import { useDisplayUnit }    from '../hooks/useDisplayUnit';
 import { parseNumber }       from '../utils/emissionsUtils';
 import { PERMIAN_TOTAL_VARIABLE, getPeriodAnthroTotal } from '../utils/manifestUtils';
 
@@ -13,6 +14,7 @@ const KG_TO_GG = 1e6;
 export function DataTotals() {
   const { activeDataset, controls, selectedState } = useDatasetContext();
   const { data: baseData } = useEmissionData();
+  const { label: units, convert } = useDisplayUnit();
 
   const { year, satellite } = controls;
   const isState = !!selectedState;
@@ -135,13 +137,24 @@ export function DataTotals() {
 
   if (!SUPPORTED.has(activeDataset.id) || !baseData) return null;
 
-  const units = activeDataset.display.units;
-  const fmt   = v => (v != null && Number.isFinite(v)) ? v.toFixed(2) : '—';
+  // Large units (e.g. Tons) push values into the hundreds of millions — a
+  // fully expanded, grouped number is both hard to read and too wide for
+  // the sidebar (it's a single unbreakable token, so it can only overflow,
+  // not wrap). Compact notation (329.26M) keeps it short in any unit.
+  const fmt = v => {
+    if (v == null || !Number.isFinite(v)) return '—';
+    return Math.abs(v) >= 1000
+      ? new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(v)
+      : v.toFixed(2);
+  };
 
   // Natural = Total minus Anthropogenic, derived rather than sourced directly
   // — every branch above already computes both, so this needs no per-dataset case.
-  const naturalBottomUp = (totalBottomUp != null && anthroBottomUp != null) ? totalBottomUp - anthroBottomUp : null;
-  const naturalPost      = (totalPost != null && anthroPost != null) ? totalPost - anthroPost : null;
+  // Scaling is linear, so converting before or after the subtraction is equivalent.
+  const naturalBottomUp = (totalBottomUp != null && anthroBottomUp != null) ? convert(totalBottomUp - anthroBottomUp) : null;
+  const naturalPost      = (totalPost != null && anthroPost != null) ? convert(totalPost - anthroPost) : null;
+  const anthroBottomUpDisplay = convert(anthroBottomUp);
+  const anthroPostDisplay     = convert(anthroPost);
 
   const placeLabel = selectedState
     ? selectedState.toUpperCase()
@@ -180,8 +193,8 @@ export function DataTotals() {
         <div className="dtc-col-header">{posteriorLabel}</div>
 
         <div className="dtc-label">Anthropogenic</div>
-        <NumCell value={anthroBottomUp} />
-        <NumCell value={anthroPost} />
+        <NumCell value={anthroBottomUpDisplay} />
+        <NumCell value={anthroPostDisplay} />
 
         <div className="dtc-label">Natural</div>
         <NumCell value={naturalBottomUp} />

@@ -101,6 +101,12 @@ export function DatasetProvider({ initialFamilyId, initialDatasetId, children })
   // Shape: { kind: 'tif'|'json', sectors: { [name]: {url, gridMeta, size} }, meta: {name, units} }
   const [uploadedData, setUploadedData] = useState(null);
 
+  // ── Display mass unit (Tg/Gg/tons) — a dashboard-wide preference, not a
+  // per-dataset control, so it persists as the user switches datasets.
+  // Datasets whose display.units isn't a recognized mass unit (e.g. CO2's
+  // ppm) ignore it; see useDisplayUnit.
+  const [massUnit, setMassUnit] = useState('Tg');
+
   const setSelectedState = useCallback((stateName) => {
     setSelectedStateRaw(stateName);
   }, []);
@@ -150,8 +156,10 @@ export function DatasetProvider({ initialFamilyId, initialDatasetId, children })
     uploadedData,
     setUploadedData,
     clearUploadedData,
+    massUnit,
+    setMassUnit,
   }), [
-    state, allFamilies, selectedState, jsonGridDomain, uploadedData,
+    state, allFamilies, selectedState, jsonGridDomain, uploadedData, massUnit,
     setActiveFamily, setActiveDataset, setControl, setSelectedState,
     setUploadedData, clearUploadedData,
   ]);

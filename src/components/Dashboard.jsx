@@ -3,6 +3,7 @@ import { useDatasetContext } from '../context/DatasetContext';
 import { FamilySelector }   from './FamilySelector';
 import { DatasetSelector }  from './DatasetSelector';
 import { ControlPanel }     from './ControlPanel';
+import { UnitsSelector }    from './UnitsSelector';
 import { DataTotals }       from './DataTotals';
 import { UploadPanel }      from './UploadPanel';
 import { MapView }          from './MapView';
@@ -73,6 +74,7 @@ export function Dashboard() {
           </div>
 
           {/* ── Emissions totals summary ──────────────────────────────── */}
+          <UnitsSelector />
           <DataTotals />
 
           {activeDataset.id === 'user-upload' && <UploadPanel />}

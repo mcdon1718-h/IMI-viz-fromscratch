@@ -12,6 +12,7 @@ import {
 }                                  from 'recharts';
 import { useDatasetContext }        from '../context/DatasetContext';
 import { useEmissionData }          from '../hooks/useEmissionData';
+import { useDisplayUnit }           from '../hooks/useDisplayUnit';
 import {
   buildLineData,
   buildBottomUpLineData,
@@ -83,6 +84,7 @@ const SUPPORTED = new Set(['ch4-conus', 'ch4-colombia']);
 export function TimeSeriesPlot() {
   const { activeDataset, activeFamily, controls, selectedState } = useDatasetContext();
   const { data: baseData } = useEmissionData();
+  const { label: displayUnits, convert } = useDisplayUnit();
 
   if (activeDataset.gridType === 'period') {
     if (!baseData?.manifest) return null;
@@ -108,8 +110,8 @@ export function TimeSeriesPlot() {
 
     const chartData = post.dates.map((date, i) => ({
       date,
-      value:    post.values[i]  != null ? post.values[i]  / KG_TO_GG : null,
-      bottomUp: prior.values[i] != null ? prior.values[i] / KG_TO_GG : null,
+      value:    post.values[i]  != null ? convert(post.values[i]  / KG_TO_GG) : null,
+      bottomUp: prior.values[i] != null ? convert(prior.values[i] / KG_TO_GG) : null,
     }));
 
     return (
@@ -117,7 +119,7 @@ export function TimeSeriesPlot() {
         <div className="chart-header">
           <span className="chart-title">Time Series</span>
           <span className="chart-sector">{sectorLabel}</span>
-          <span className="chart-units">{activeDataset.display.units}</span>
+          <span className="chart-units">{displayUnits}</span>
         </div>
 
         <ResponsiveContainer width="100%" height={160}>
@@ -142,7 +144,7 @@ export function TimeSeriesPlot() {
             />
 
             <Tooltip
-              content={<TimeSeriesCustomTooltip units={activeDataset.display.units} accent={accent} />}
+              content={<TimeSeriesCustomTooltip units={displayUnits} accent={accent} />}
               cursor={{
                 stroke:          accent,
                 strokeOpacity:   0.4,
@@ -217,11 +219,11 @@ export function TimeSeriesPlot() {
 
   const chartData = lineData.years.map((year, i) => ({
     year,
-    value:    lineData.values[i],
-    min:      lineData.mins[i],
-    max:      lineData.maxs[i],
+    value:    convert(lineData.values[i]),
+    min:      convert(lineData.mins[i]),
+    max:      convert(lineData.maxs[i]),
     // undefined (not null) when showBottomUp is false so Recharts ignores the key entirely
-    ...(showBottomUp && { bottomUp: bottomUpLine?.values[i] ?? null }),
+    ...(showBottomUp && { bottomUp: convert(bottomUpLine?.values[i] ?? null) }),
   }));
 
   return (
@@ -230,7 +232,7 @@ export function TimeSeriesPlot() {
         <span className="chart-title">Time Series</span>
         <span className="chart-place">{placeLabel}</span>
         <span className="chart-sector">{labelSector(controls.sector)}</span>
-        <span className="chart-units">{activeDataset.display.units}</span>
+        <span className="chart-units">{displayUnits}</span>
       </div>
 
       <ResponsiveContainer width="100%" height={160}>
@@ -255,7 +257,7 @@ export function TimeSeriesPlot() {
           <Tooltip
             content={
               <TimeSeriesCustomTooltip
-                units={activeDataset.display.units}
+                units={displayUnits}
                 accent={accent}
               />
             }
