@@ -93,6 +93,7 @@ registerDataset({
     legendTitle:      'CH₄ Emissions',
     legendUnits:      'kg km⁻² h⁻¹',
     defaultPlaceLabel: 'National', // shown in chart headers when no state is selected
+    totalsLabels: { bottomUp: 'Bottom-up', posterior: 'IMI Best Estimate' }, // column headers on the DataTotals table
     colorScale: {
       stops: [
         [0,    '#ffffcc'],

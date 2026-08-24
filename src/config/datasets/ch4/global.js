@@ -121,6 +121,7 @@ registerDataset({
     legendTitle:      'CH₄ Emissions',
     legendUnits:      'Tg/yr',
     defaultPlaceLabel: 'Global', // shown in chart headers when no country is selected
+    totalsLabels: { bottomUp: 'Bottom-up', posterior: 'IMIBest Estimate' }, // column headers on the DataTotals table
     colorScale: {
       stops: [
         [0,    '#ffffcc'],

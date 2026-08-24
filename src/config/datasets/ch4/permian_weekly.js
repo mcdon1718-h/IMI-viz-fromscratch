@@ -108,6 +108,7 @@ registerDataset({
     units:       'Gg/week',
     legendTitle: 'CH₄ Emissions',
     legendUnits: 'kg h⁻¹',
+    totalsLabels: { bottomUp: 'Bottom-up', posterior: 'IMI Best Estimate' }, // column headers on the DataTotals table
     colorScale: {
       stops: [
         [0,    '#ffffcc'],

@@ -140,6 +140,7 @@ registerDataset({
     legendTitle:      'CH₄ Emissions',
     legendUnits:      'kg km⁻² h⁻¹',
     defaultPlaceLabel: 'Colombia', // shown in chart headers when no department is selected
+    totalsLabels: { bottomUp: 'Bottom-Up', posterior: 'IMI Best Estimate' }, // column headers on the DataTotals table
     colorScale: {
       stops: [
         [0,    '#ffffcc'],

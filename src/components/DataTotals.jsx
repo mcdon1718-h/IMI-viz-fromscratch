@@ -155,17 +155,17 @@ export function DataTotals() {
     ? (baseData.manifest?.periods?.find(p => p.key === String(controls.period))?.start ?? year)
     : year;
 
+  // Column headers live on each dataset's config (display.totalsLabels) so
+  // they can be edited per dataset without touching this component.
+  const { bottomUp: bottomUpLabel, posterior: posteriorLabel } = activeDataset.display.totalsLabels ?? {};
+
   // Helper: render a number cell — accented if populated, dimmed if not.
-  // `source` is a small caption naming where that column's number comes from
-  // (it replaces the old fixed "Bottom-up"/"Posterior" column headers, since
-  // the bottom-up source now differs by row — see the two calls below).
-  function NumCell({ value, source }) {
+  function NumCell({ value }) {
     const populated = value != null && Number.isFinite(value);
     return (
       <div className={`dtc-num ${populated ? 'dtc-accent' : 'dtc-dim'}`}>
         {fmt(value)}
         {populated && <span className="dtc-units"> {units}</span>}
-        <div className="dtc-source">{source}</div>
       </div>
     );
   }
@@ -175,13 +175,17 @@ export function DataTotals() {
       <div className="data-totals-place">{placeLabel}{' - '}{periodLabel}</div>
 
       <div className="data-totals-table">
+        <div className="dtc-col-header" />
+        <div className="dtc-col-header">{bottomUpLabel}</div>
+        <div className="dtc-col-header">{posteriorLabel}</div>
+
         <div className="dtc-label">Anthropogenic</div>
-        <NumCell value={anthroBottomUp} source="UNFCCC Reports" />
-        <NumCell value={anthroPost}     source="Best Estimate" />
+        <NumCell value={anthroBottomUp} />
+        <NumCell value={anthroPost} />
 
         <div className="dtc-label">Natural</div>
-        <NumCell value={naturalBottomUp} source="Various Inventories" />
-        <NumCell value={naturalPost}     source="Best Estimate" />
+        <NumCell value={naturalBottomUp} />
+        <NumCell value={naturalPost} />
       </div>
     </div>
   );
