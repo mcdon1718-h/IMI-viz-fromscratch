@@ -314,7 +314,7 @@ export function UploadPanel() {
         />
       </div>
 <div className="upload-field">
-        <label className="control-label">Split-format datasets (optional)</label>
+        <label className="control-label">Dataset grid only (optional)</label>
 
         {uploadedData?.sharedGridMeta ? (
           <div className="upload-sector-row">
@@ -341,9 +341,9 @@ export function UploadPanel() {
         )}
 
         <p className="upload-hint">
-          If your sector files don't include "lats"/"lons" themselves, upload that shared
-          grid shape file once here, then upload sector files with just "values" as usual.
-          Accepts "lats"/"lons" either at the top level or nested under a "grid" key.
+          You may want to upload multiple files with sector data on the same grid shape. To save space, 
+          you can opt to upload a single grid shape file (JSON with "lats" and "lons") here, 
+          then upload sector files with just "values" arrays above. 
         </p>
       </div>
 
