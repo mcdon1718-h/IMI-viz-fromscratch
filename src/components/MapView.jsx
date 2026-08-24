@@ -752,7 +752,7 @@ function ChoroplethLayer({
       });
       layer.on({
         click(e)     { e.originalEvent?.stopPropagation?.(); onStateClick(name); },
-        mouseover(e) { e.target.setStyle({ weight: 2.5, color: '#fff', fillOpacity: 0.95 }); e.target.bringToFront(); },
+        mouseover(e) { e.target.setStyle({ weight: 2.5, color: '#fff', fillOpacity: opacityRef.current }); e.target.bringToFront(); },
         mouseout(e)  { e.target.setStyle({ weight: 0.6, color: '#1a1a2e', fillOpacity: opacityRef.current }); },
       });
     },
