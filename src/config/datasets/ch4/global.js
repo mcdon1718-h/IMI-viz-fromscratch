@@ -181,6 +181,21 @@ registerDataset({
     legendUnits:      'Tg/yr',
     defaultPlaceLabel: 'Global', // shown in chart headers when no country is selected
     totalsLabels: { bottomUp: 'Bottom-up', posterior: 'IMI Best Estimate' }, // column headers on the DataTotals table
+    // Manually curated order + labels for the Sector Breakdown bar chart
+    // (SectorBarChart.jsx's resolveBarSectors) — edit freely; a sector left
+    // out just doesn't get a bar. Keys must match RANGES_SECTOR_KEYS above
+    // (website_data_withranges.csv's sectors); reproduces its current order/
+    // labelSector's labels as a starting point.
+    barSectors: [
+      { key: 'TotalAnth',  label: 'Total' },
+      { key: 'Livestock',  label: 'Livestock' },
+      { key: 'Coal',       label: 'Coal' },
+      { key: 'OilAndGas',  label: 'Oil & Gas' },
+      { key: 'Rice',       label: 'Rice' },
+      { key: 'Reservoirs', label: 'Reservoirs' },
+      { key: 'Waste',      label: 'Waste' },
+      { key: 'Other',      label: 'Other' },
+    ],
     colorScale: {
       stops: [
         [0,    '#ffffcc'],

@@ -141,6 +141,19 @@ registerDataset({
     legendUnits:      'kg km⁻² h⁻¹',
     defaultPlaceLabel: 'Colombia', // shown in chart headers when no department is selected
     totalsLabels: { bottomUp: 'Bottom-Up', posterior: 'IMI Best Estimate' }, // column headers on the DataTotals table
+    // Manually curated order + labels for the Sector Breakdown bar chart
+    // (SectorBarChart.jsx's resolveBarSectors) — edit freely; a sector left
+    // out just doesn't get a bar. Reproduces BAR_SECTOR_KEYS' current order/
+    // labelSector's labels as a starting point.
+    barSectors: [
+      { key: 'Coal',       label: 'Coal' },
+      { key: 'OilGas',     label: 'Oil/Gas' },
+      { key: 'Livestock',  label: 'Livestock' },
+      { key: 'Reservoirs', label: 'Reservoirs' },
+      { key: 'Rice',       label: 'Rice' },
+      { key: 'Waste',      label: 'Waste' },
+      { key: 'Other',      label: 'Other' },
+    ],
     colorScale: {
       stops: [
         [0,    '#ffffcc'],

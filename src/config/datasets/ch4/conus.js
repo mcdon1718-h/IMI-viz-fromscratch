@@ -94,6 +94,22 @@ registerDataset({
     legendUnits:      'kg km⁻² h⁻¹',
     defaultPlaceLabel: 'National', // shown in chart headers when no state is selected
     totalsLabels: { bottomUp: 'Bottom-up', posterior: 'IMI Best Estimate' }, // column headers on the DataTotals table
+    // Manually curated order + labels for the Sector Breakdown bar chart
+    // (SectorBarChart.jsx's resolveBarSectors) — edit freely; a sector left
+    // out just doesn't get a bar. Reproduces deriveSectors' current
+    // alphabetical order/labelSector's labels as a starting point.
+    barSectors: [
+      { key: 'Total_ExclSoilAbs', label: 'Total' },
+      { key: 'BiomassBurn',       label: 'Biomass Burn.' },
+      { key: 'Coal',              label: 'Coal' },
+      { key: 'Landfills',         label: 'Landfills' },
+      { key: 'Livestock',         label: 'Livestock' },
+      { key: 'ONG',               label: 'Oil/Gas' },
+      { key: 'Reservoirs',        label: 'Reservoirs' },
+      { key: 'Rice',              label: 'Rice' },
+      { key: 'Wastewater',        label: 'Wastewater' },
+      { key: 'Wetlands',          label: 'Wetlands' },
+    ],
     colorScale: {
       stops: [
         [0,    '#ffffcc'],

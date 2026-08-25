@@ -31,6 +31,23 @@ const TEAL_COLOR   = '#14b8a6';
 // week; Gg (1e6 kg) keeps the axis/tooltip numbers readable.
 const KG_TO_GG = 1e6;
 
+// A dataset's display.barSectors ([{ key, label }, ...], in a config's own
+// config file) manually curates the Sector Breakdown chart's bar order and
+// display text. When a dataset hasn't defined one yet, fall back to the
+// data's natural key order and labelSector()'s cross-dataset lookup — the
+// pre-existing behavior. Sectors named in barSectors that aren't present in
+// `labels` (a typo, or a sector the data doesn't have this year) are
+// dropped rather than rendered as an empty bar.
+function resolveBarSectors(labels, barSectors) {
+  if (!barSectors?.length) {
+    return labels.map((key, i) => ({ key, label: labelSector(key), i }));
+  }
+  const indexByKey = new Map(labels.map((key, i) => [key, i]));
+  return barSectors
+    .filter(({ key }) => indexByKey.has(key))
+    .map(({ key, label }) => ({ key, label, i: indexByKey.get(key) }));
+}
+
 function UploadBarTooltip({ active, payload, label, units, accent }) {
   if (!active || !payload?.length) return null;
   const val = payload[0]?.value;
@@ -284,8 +301,9 @@ export function SectorBarChart() {
       ? buildRangesBottomUpBarData(baseData.sectorRanges, { selectedState })
       : null;
 
-    const chartData = rangesData.labels.map((key, i) => ({
-      sector:        labelSector(key),
+    const barSectors = resolveBarSectors(rangesData.labels, activeDataset.display?.barSectors);
+    const chartData = barSectors.map(({ label, i }) => ({
+      sector:        label,
       value:         convert(rangesData.values[i]),
       errorRange:    showUncertainty && rangesData.mins[i] != null
         ? [convert(rangesData.mins[i]), convert(rangesData.maxs[i])]
@@ -401,8 +419,9 @@ export function SectorBarChart() {
     ? buildBottomUpBarData(baseData, { year: controls.year, mode, selectedState })
     : null;
 
-  const chartData = barData.labels.map((key, i) => ({
-    sector:        labelSector(key),
+  const barSectors = resolveBarSectors(barData.labels, activeDataset.display?.barSectors);
+  const chartData = barSectors.map(({ label, i }) => ({
+    sector:        label,
     value:         convert(barData.values[i]),
     errorRange:    showUncertainty && barData.mins[i] != null
       ? [convert(barData.mins[i]), convert(barData.maxs[i])]
