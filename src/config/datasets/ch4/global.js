@@ -176,6 +176,29 @@ registerDataset({
         priorBare[s]          = prior;
         addTo(worldPrior,     s, prior);
         addTo(worldPosterior, s, post);
+
+        // Posterior-only uncertainty (no bottom-up/prior uncertainty exists).
+        // merge_sector_uncertainty.py merges per-country +/- deltas from
+        // website_data_withranges.csv into `${s}_min`/`${s}_max` absolute-
+        // bound columns, for the sectors that source covers 1:1 (Livestock,
+        // Rice, Coal, Reservoirs, OilAndGas) — see that script for the
+        // sector-granularity mapping. The remaining BAR_SECTOR_KEYS
+        // (Wetlands, BiomassBurn, OtherAnth, Wastewater, Landfills, Natural)
+        // have no such column, so parseNumber(undefined) below is null,
+        // which buildBarData already reads as "no uncertainty for this bar".
+        // Bare `${s}_min`/`${s}_max` keys match ch4-conus's CSV convention,
+        // so buildBarData (emissionsUtils.js) picks these up with no further
+        // code changes.
+        const min = parseNumber(raw[`${s}_min`]);
+        const max = parseNumber(raw[`${s}_max`]);
+        row[`${s}_min`] = min;
+        row[`${s}_max`] = max;
+        // World total sums each covered country's own bound — a worst-case
+        // approximation (assumes every country sits at its extreme at once),
+        // same tradeoff as everywhere else this data is summed across cells/
+        // countries; no separate world-level entry exists in the source file.
+        addTo(worldPosterior, `${s}_min`, min);
+        addTo(worldPosterior, `${s}_max`, max);
       }
 
       const totalAnthPrior = parseNumber(raw.Total_Anth_Prior);
