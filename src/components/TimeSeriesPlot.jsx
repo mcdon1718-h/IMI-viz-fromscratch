@@ -68,7 +68,7 @@ function TimeSeriesCustomTooltip({ active, payload, label, units, accent }) {
           key={row.name}
           style={{ color: row.color, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem' }}
         >
-          <span style={{ whiteSpace: 'pre-line' }}>{row.name}</span>
+          <span>{row.name}</span>
           <span style={{ fontWeight: row.weight }}>
             {row.value != null ? Number(row.value).toFixed(3) : 'N/A'}
             {row.spread != null && (
