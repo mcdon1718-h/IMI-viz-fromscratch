@@ -75,16 +75,18 @@ function SectorBarCustomTooltip({
   const errorRange = postEntry?.payload?.errorRange;
   const buVal      = buEntry?.value;
 
-  const rows = [];
-  if (showUncertainty && errorRange) {
-    rows.push({ name: 'Upper bound', value: errorRange[1], color: DIM_COLOR,    weight: 400 });
-  }
-  rows.push(          { name: 'Posterior',   value: val,           color: BRIGHT_COLOR, weight: 600 });
-  if (showUncertainty && errorRange) {
-    rows.push({ name: 'Lower bound', value: errorRange[0], color: DIM_COLOR,    weight: 400 });
-  }
+  // Same +/- convention as the map's grid-cell hover tooltip: the larger of
+  // the two (possibly asymmetric) deltas around the central value, collapsed
+  // to a single figure, rather than separate upper/lower bound rows.
+  const spread = (showUncertainty && errorRange && val != null)
+    ? Math.max(0, val - errorRange[0], errorRange[1] - val)
+    : null;
+
+  const rows = [
+    { name: 'IMI Best Estimate', value: val, spread, color: BRIGHT_COLOR, weight: 600 },
+  ];
   if (showBottomUp && buVal != null) {
-    rows.push({ name: 'Bottom-up',   value: buVal,         color: TEAL_COLOR,   weight: 600 });
+    rows.push({ name: 'Bottom-up', value: buVal, color: TEAL_COLOR, weight: 600 });
   }
 
   return (
@@ -103,11 +105,16 @@ function SectorBarCustomTooltip({
       {rows.map(row => (
         <div
           key={row.name}
-          style={{ color: row.color, display: 'flex', justifyContent: 'space-between', gap: '1rem' }}
+          style={{ color: row.color, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem' }}
         >
-          <span>{row.name}</span>
+          <span style={{ whiteSpace: 'pre-line' }}>{row.name}</span>
           <span style={{ fontWeight: row.weight }}>
             {row.value != null ? Number(row.value).toFixed(3) : 'N/A'}
+            {row.spread != null && (
+              <span style={{ color: DIM_COLOR, fontWeight: 400, fontSize: '0.75rem' }}>
+                {' ± '}{Number(row.spread).toFixed(3)}
+              </span>
+            )}
             {units && (
               <span style={{ opacity: 0.6, fontSize: '0.68rem', marginLeft: '0.2rem' }}>
                 {units}

@@ -35,14 +35,18 @@ function TimeSeriesCustomTooltip({ active, payload, label, units, accent }) {
 
   // Index by dataKey for reliable lookup regardless of render order
   const byKey = Object.fromEntries(payload.map(p => [p.dataKey, p]));
+  const val   = byKey.value?.value;
+
+  // Same +/- convention as the map's grid-cell hover tooltip: the larger of
+  // the two (possibly asymmetric) deltas around the central value, collapsed
+  // to a single figure, rather than separate upper/lower bound rows.
+  const spread = (byKey.min && byKey.max && val != null)
+    ? Math.max(0, val - byKey.min.value, byKey.max.value - val)
+    : null;
 
   const rows = [];
-  if (byKey.max)
-    rows.push({ name: 'Upper bound', value: byKey.max.value,     color: DIM_COLOR,    weight: 400 });
   if (byKey.value)
-    rows.push({ name: 'Posterior',   value: byKey.value.value,   color: BRIGHT_COLOR, weight: 600 });
-  if (byKey.min)
-    rows.push({ name: 'Lower bound', value: byKey.min.value,     color: DIM_COLOR,    weight: 400 });
+    rows.push({ name: 'IMI Best Estimate', value: val, spread, color: BRIGHT_COLOR, weight: 600 });
   if (byKey.bottomUp && byKey.bottomUp.value != null)
     rows.push({ name: 'Bottom-up',   value: byKey.bottomUp.value, color: TEAL_COLOR,  weight: 600 });
 
@@ -62,11 +66,16 @@ function TimeSeriesCustomTooltip({ active, payload, label, units, accent }) {
       {rows.map(row => (
         <div
           key={row.name}
-          style={{ color: row.color, display: 'flex', justifyContent: 'space-between', gap: '1rem' }}
+          style={{ color: row.color, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem' }}
         >
-          <span>{row.name}</span>
+          <span style={{ whiteSpace: 'pre-line' }}>{row.name}</span>
           <span style={{ fontWeight: row.weight }}>
             {row.value != null ? Number(row.value).toFixed(3) : 'N/A'}
+            {row.spread != null && (
+              <span style={{ color: DIM_COLOR, fontWeight: 400, fontSize: '0.75rem' }}>
+                {' ± '}{Number(row.spread).toFixed(3)}
+              </span>
+            )}
             {units && (
               <span style={{ opacity: 0.6, fontSize: '0.68rem', marginLeft: '0.2rem' }}>
                 {units}
