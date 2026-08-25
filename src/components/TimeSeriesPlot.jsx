@@ -88,6 +88,26 @@ function TimeSeriesCustomTooltip({ active, payload, label, units, accent }) {
   );
 }
 
+// Color key for charts that plot both series — swatch colors match the Line
+// strokes exactly (accent = IMI output, TEAL_COLOR = bottom-up).
+function SeriesLegend({ accent }) {
+  const swatch = color => ({
+    width: 8, height: 8, borderRadius: 2, background: color, display: 'inline-block',
+  });
+  return (
+    <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.4rem', fontSize: '0.8rem', color: '#94a3b8' }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+        <span style={swatch(accent)} />
+        IMI output
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+        <span style={swatch(TEAL_COLOR)} />
+        Bottom-up
+      </span>
+    </div>
+  );
+}
+
 const SUPPORTED = new Set(['ch4-conus', 'ch4-colombia']);
 
 export function TimeSeriesPlot() {
@@ -130,6 +150,7 @@ export function TimeSeriesPlot() {
           <span className="chart-sector">{sectorLabel}</span>
           <span className="chart-units">{displayUnits}</span>
         </div>
+        <SeriesLegend accent={accent} />
 
         <ResponsiveContainer width="100%" height={160}>
           <ComposedChart
@@ -243,6 +264,7 @@ export function TimeSeriesPlot() {
         <span className="chart-sector">{labelSector(controls.sector)}</span>
         <span className="chart-units">{displayUnits}</span>
       </div>
+      {showBottomUp && <SeriesLegend accent={accent} />}
 
       <ResponsiveContainer width="100%" height={160}>
         <ComposedChart
