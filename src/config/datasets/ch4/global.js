@@ -7,8 +7,8 @@ const YEAR = 2023; // only year available for this dataset
 // app's sector list (Termites/Seeps/OtherAnthPlusRes are folded into
 // Natural/OtherAnth there and are intentionally not exposed separately here).
 const BAR_SECTOR_KEYS = [
-  'Reservoirs', 'Natural', 'Wetlands', 'BiomassBurn', 'OtherAnth',
-  'Rice', 'Wastewater', 'Landfills', 'Livestock', 'Coal', 'OilAndGas',
+  'TotalAnth', 'Livestock','Coal', 'OilAndGas', 'Rice', 'Landfills', 'Wastewater',
+  'Reservoirs', 'OtherAnth', 'Wetlands', 'BiomassBurn', 'Natural'
 ];
 
 const SECTOR_OPTIONS = [
@@ -25,6 +25,65 @@ const SECTOR_OPTIONS = [
   { value: 'BiomassBurn', label: 'Biomass Burning' },
   { value: 'Natural',     label: 'Other Natural' },
 ];
+
+// Sector Breakdown chart sector keys — deliberately coarser than
+// BAR_SECTOR_KEYS (see loadSectorRanges below): sourced entirely from
+// website_data_withranges.csv, which is the country- and sector-level
+// totals + uncertainty file (emissions_data3.csv has no reliable per-sector
+// uncertainty and is no longer used for the bar chart). That file only has
+// Livestock/Coal/Oil-Gas/Rice/Reservoirs/Waste/Other (Waste bundles
+// Wastewater+Landfills, Other bundles OtherAnth+BiomassBurn) plus
+// AnthroTotal — no Wetlands, no Natural (Termites/Seeps) split at all.
+const RANGES_SECTOR_KEYS = ['TotalAnth', 'Livestock', 'Coal', 'OilAndGas', 'Rice', 'Reservoirs', 'Waste', 'Other'];
+
+// RANGES_SECTOR_KEYS value -> website_data_withranges.csv column prefix.
+// Only OilAndGas (Oil-Gas) and TotalAnth (AnthroTotal) differ in spelling.
+const RANGES_COLUMN_PREFIX = {
+  TotalAnth:  'AnthroTotal',
+  Livestock:  'Livestock',
+  Coal:       'Coal',
+  OilAndGas:  'Oil-Gas',
+  Rice:       'Rice',
+  Reservoirs: 'Reservoirs',
+  Waste:      'Waste',
+  Other:      'Other',
+};
+
+// Builds { sectorKeys, byCountry, world } from website_data_withranges.csv's
+// rows: byCountry[countryName][sectorKey] = { prior, post, minDelta, maxDelta },
+// where minDelta/maxDelta are the file's own +/- uncertainty magnitudes (not
+// absolute bounds — SectorBarChart derives the absolute lower/upper bound as
+// post -/+ delta, clamping the lower bound to 0). `world` is the same shape,
+// summed across every country the file covers (154 of the 173 in
+// emissions_data3.csv; there's no separate world-level row in the source).
+function loadSectorRanges(rangesRows) {
+  const byCountry  = {};
+  const worldSums  = {};
+
+  for (const raw of rangesRows) {
+    const name = raw.countries?.trim();
+    if (!name) continue;
+
+    const bySector = {};
+    for (const key of RANGES_SECTOR_KEYS) {
+      const prefix   = RANGES_COLUMN_PREFIX[key];
+      const prior    = parseNumber(raw[`${prefix}_prior`]);
+      const post     = parseNumber(raw[`${prefix}_post`]);
+      const minDelta = parseNumber(raw[`${prefix}_post_min`]);
+      const maxDelta = parseNumber(raw[`${prefix}_post_max`]);
+      bySector[key] = { prior, post, minDelta, maxDelta };
+
+      const sums = worldSums[key] ?? (worldSums[key] = { prior: null, post: null, minDelta: null, maxDelta: null });
+      if (prior    != null) sums.prior    = (sums.prior    ?? 0) + prior;
+      if (post     != null) sums.post     = (sums.post     ?? 0) + post;
+      if (minDelta != null) sums.minDelta = (sums.minDelta ?? 0) + minDelta;
+      if (maxDelta != null) sums.maxDelta = (sums.maxDelta ?? 0) + maxDelta;
+    }
+    byCountry[name] = bySector;
+  }
+
+  return { sectorKeys: RANGES_SECTOR_KEYS, byCountry, world: worldSums };
+}
 
 // world-countries.json (Natural Earth) identifies features by ADMIN name,
 // which diverges from this CSV's "countries" column for a handful of
@@ -121,7 +180,7 @@ registerDataset({
     legendTitle:      'CH₄ Emissions',
     legendUnits:      'Tg/yr',
     defaultPlaceLabel: 'Global', // shown in chart headers when no country is selected
-    totalsLabels: { bottomUp: 'Bottom-up', posterior: 'IMIBest Estimate' }, // column headers on the DataTotals table
+    totalsLabels: { bottomUp: 'Bottom-up', posterior: 'IMI Best Estimate' }, // column headers on the DataTotals table
     colorScale: {
       stops: [
         [0,    '#ffffcc'],
@@ -134,8 +193,9 @@ registerDataset({
   },
 
   async dataLoader() {
-    const [rows, countriesGeoJSON, usStatesGeoJSON] = await Promise.all([
+    const [rows, rangesRows, countriesGeoJSON, usStatesGeoJSON] = await Promise.all([
       fetchCSV(`${import.meta.env.BASE_URL}data/emissions_data3.csv`),
+      fetchCSV(`${import.meta.env.BASE_URL}data/ch4_global/website_data_withranges.csv`),
       fetch(`${import.meta.env.BASE_URL}data/world-countries.json`).then(r => {
         if (!r.ok) throw new Error(`world-countries.json: HTTP ${r.status}`);
         return r.json();
@@ -176,29 +236,6 @@ registerDataset({
         priorBare[s]          = prior;
         addTo(worldPrior,     s, prior);
         addTo(worldPosterior, s, post);
-
-        // Posterior-only uncertainty (no bottom-up/prior uncertainty exists).
-        // merge_sector_uncertainty.py merges per-country +/- deltas from
-        // website_data_withranges.csv into `${s}_min`/`${s}_max` absolute-
-        // bound columns, for the sectors that source covers 1:1 (Livestock,
-        // Rice, Coal, Reservoirs, OilAndGas) — see that script for the
-        // sector-granularity mapping. The remaining BAR_SECTOR_KEYS
-        // (Wetlands, BiomassBurn, OtherAnth, Wastewater, Landfills, Natural)
-        // have no such column, so parseNumber(undefined) below is null,
-        // which buildBarData already reads as "no uncertainty for this bar".
-        // Bare `${s}_min`/`${s}_max` keys match ch4-conus's CSV convention,
-        // so buildBarData (emissionsUtils.js) picks these up with no further
-        // code changes.
-        const min = parseNumber(raw[`${s}_min`]);
-        const max = parseNumber(raw[`${s}_max`]);
-        row[`${s}_min`] = min;
-        row[`${s}_max`] = max;
-        // World total sums each covered country's own bound — a worst-case
-        // approximation (assumes every country sits at its extreme at once),
-        // same tradeoff as everywhere else this data is summed across cells/
-        // countries; no separate world-level entry exists in the source file.
-        addTo(worldPosterior, `${s}_min`, min);
-        addTo(worldPosterior, `${s}_max`, max);
       }
 
       const totalAnthPrior = parseNumber(raw.Total_Anth_Prior);
@@ -227,6 +264,7 @@ registerDataset({
       nationalPrior:     { [YEAR]: worldPrior },
       stateByYearPrior,
       sectorKeys:      BAR_SECTOR_KEYS,
+      sectorRanges:    loadSectorRanges(rangesRows), // Sector Breakdown chart's sole data source — see loadSectorRanges
       statesGeoJSON:   countriesGeoJSON,
       usStatesGeoJSON,
       manifest:        null,

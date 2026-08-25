@@ -411,14 +411,14 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary
 }
 
 .chart-year {
-  font-size:   .68rem;
+  font-size:   .85rem;
   font-weight: 700;
   color:       var(--accent);
   margin-left: auto;
 }
 
 .chart-units {
-  font-size: .68rem;
+  font-size: .85rem;
   color:     var(--text-muted);
   opacity:   .7;
 }

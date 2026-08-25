@@ -238,3 +238,53 @@ export function buildBottomUpLineData(baseData, { mode, sectorKey, selectedState
 
   return { years, values };
 }
+
+// ─── ch4-global Sector Breakdown chart (website_data_withranges.csv) ─────────
+// Unlike buildBarData, this reads directly from dataLoader's `sectorRanges`
+// (country -> sector -> {prior, post, minDelta, maxDelta} / a `world` sum
+// across all covered countries — see global.js's loadSectorRanges) rather
+// than the emissions_data3.csv-backed byYear/national* structures, since
+// that CSV has no reliable per-sector uncertainty.
+//
+// sectorRanges stores minDelta/maxDelta as +/- magnitudes, not absolute
+// bounds, so the absolute lower/upper bound is `post -/+ delta` — and since
+// a sector/country's delta can exceed its own post value, the lower bound
+// is clamped to 0 rather than going negative.
+export function buildRangesBarData(sectorRanges, { selectedState, satellite }) {
+  const empty = { labels: [], values: [], mins: [], maxs: [] };
+  if (!sectorRanges) return empty;
+
+  const bySector = selectedState ? sectorRanges.byCountry[selectedState] : sectorRanges.world;
+  if (!bySector) return empty;
+
+  const labels    = sectorRanges.sectorKeys;
+  const uncertain = hasUncertainty(satellite); // ranges file is posterior-only
+
+  const values = [], mins = [], maxs = [];
+  for (const key of labels) {
+    const entry = bySector[key];
+    values.push(satellite === 'prior' ? (entry?.prior ?? null) : (entry?.post ?? null));
+
+    if (!uncertain || entry?.post == null) {
+      mins.push(null);
+      maxs.push(null);
+      continue;
+    }
+    mins.push(entry.minDelta != null ? Math.max(0, entry.post - entry.minDelta) : null);
+    maxs.push(entry.maxDelta != null ? entry.post + entry.maxDelta : null);
+  }
+
+  return { labels, values, mins, maxs };
+}
+
+// Prior (bottom-up) series for the same chart — always prior, regardless of
+// the Data Source control (only rendered when that control is posterior).
+export function buildRangesBottomUpBarData(sectorRanges, { selectedState }) {
+  if (!sectorRanges) return { labels: [], values: [] };
+
+  const bySector = selectedState ? sectorRanges.byCountry[selectedState] : sectorRanges.world;
+  if (!bySector) return { labels: [], values: [] };
+
+  const labels = sectorRanges.sectorKeys;
+  return { labels, values: labels.map(key => bySector[key]?.prior ?? null) };
+}
