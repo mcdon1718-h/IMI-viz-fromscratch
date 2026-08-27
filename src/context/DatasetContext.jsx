@@ -97,6 +97,13 @@ export function DatasetProvider({ initialFamilyId, initialDatasetId, children })
   // ── JSON grid domain (reported by JsonGridLayer, consumed by Legend) ──────
   const [jsonGridDomain, setJsonGridDomain] = useState(null);
 
+  // ── Pinned-sector grid max (Colombia only — the Total sector's own grid max,
+  // fetched independently of whichever sector is currently displayed, so the
+  // color scale can stay pinned instead of rescaling on every sector change).
+  // Shared between MapView (actual rendering) and Legend (tick display) so
+  // they read the exact same fetch rather than duplicating it.
+  const [pinnedGridMax, setPinnedGridMax] = useState(null);
+
   // ── Uploaded files (session-only, reported by UploadPanel) ────────────────
   // Shape: { kind: 'tif'|'json', sectors: { [name]: {url, gridMeta, size} }, meta: {name, units} }
   const [uploadedData, setUploadedData] = useState(null);
@@ -124,6 +131,7 @@ export function DatasetProvider({ initialFamilyId, initialDatasetId, children })
     dispatch({ type: 'SET_FAMILY', id });
     setSelectedStateRaw(null);
     setJsonGridDomain(null);
+    setPinnedGridMax(null);
     clearUploadedData();
   }, [clearUploadedData]);
 
@@ -131,6 +139,7 @@ export function DatasetProvider({ initialFamilyId, initialDatasetId, children })
     dispatch({ type: 'SET_DATASET', id });
     setSelectedStateRaw(null);
     setJsonGridDomain(null);
+    setPinnedGridMax(null);
     clearUploadedData();
   }, [clearUploadedData]);
 
@@ -153,13 +162,15 @@ export function DatasetProvider({ initialFamilyId, initialDatasetId, children })
     setSelectedState,
     jsonGridDomain,
     setJsonGridDomain,
+    pinnedGridMax,
+    setPinnedGridMax,
     uploadedData,
     setUploadedData,
     clearUploadedData,
     massUnit,
     setMassUnit,
   }), [
-    state, allFamilies, selectedState, jsonGridDomain, uploadedData, massUnit,
+    state, allFamilies, selectedState, jsonGridDomain, pinnedGridMax, uploadedData, massUnit,
     setActiveFamily, setActiveDataset, setControl, setSelectedState,
     setUploadedData, clearUploadedData,
   ]);

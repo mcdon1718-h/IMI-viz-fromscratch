@@ -264,6 +264,35 @@ function useJsonMinMax(url) {
   return minMax;
 }
 
+// ─── useJsonGridMax (fetch only, Colombia pinned-sector domain) ───────────────
+// Fetches a grid file just for its own raw max value — used to pin the color
+// scale to the Total sector's grid even while a different sector is displayed.
+function useJsonGridMax(url) {
+  const [max, setMax] = useState(null);
+
+  useEffect(() => {
+    if (!url) { setMax(null); return undefined; }
+    let cancelled = false;
+    fetch(url)
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status} — ${url}`); return r.json(); })
+      .then(data => {
+        if (cancelled) return;
+        const vals = Array.isArray(data.values) ? data.values : [];
+        let m = 0;
+        for (const raw of vals) {
+          if (raw == null) continue;
+          const v = (Number.isFinite(raw) && raw > 0) ? raw : 0;
+          if (v > m) m = v;
+        }
+        setMax(m > 0 ? m : null);
+      })
+      .catch(err => { if (!cancelled) console.error('[useJsonGridMax] load error:', err.message); });
+    return () => { cancelled = true; };
+  }, [url]);
+
+  return max;
+}
+
 // ─── useGlobalEnsembleMinMax (ch4-global hover uncertainty) ───────────────────
 // ch4-global has no per-sector/year ensemble rasters like CONUS — instead
 // there's one gzipped JSON covering the whole world at the model's native
@@ -733,7 +762,7 @@ function domainMaxFor(features, propertyKey) {
   return max;
 }
 
-function CountryGridLayer({ filePath, colorStops, opacity, onDomainReady, onLoadingChange }) {
+function CountryGridLayer({ filePath, colorStops, opacity, pinnedSector, onDomainReady, onLoadingChange }) {
   const map = useMap();
   const { controls } = useDatasetContext();
   const { convert, label: units } = useDisplayUnit();
@@ -770,10 +799,12 @@ function CountryGridLayer({ filePath, colorStops, opacity, onDomainReady, onLoad
         const features = data.features ?? [];
         featuresRef.current = features;
 
-        const propertyKey = emissionsPropertyKey(controls.sector, controls.satellite);
-        const domainMax    = domainMaxFor(features, propertyKey);
+        const propertyKey       = emissionsPropertyKey(controls.sector, controls.satellite);
+        const domainPropertyKey = emissionsPropertyKey(pinnedSector ?? controls.sector, controls.satellite);
+        const rawDomainMax      = domainMaxFor(features, domainPropertyKey);
+        const scaleMax          = controls.colorScaleMax ?? 1.0;
         styleRef.current.propertyKey = propertyKey;
-        styleRef.current.domainMax   = domainMax || 1;
+        styleRef.current.domainMax   = (rawDomainMax || 1) * scaleMax;
 
         cellsRef.current = features
           .map(f => {
@@ -811,7 +842,7 @@ function CountryGridLayer({ filePath, colorStops, opacity, onDomainReady, onLoad
 
         layer.addTo(map);
         layerRef.current = layer;
-        onDomainReady?.(domainMax > 0 ? { min: 0, max: domainMax } : null);
+        onDomainReady?.(rawDomainMax > 0 ? { min: 0, max: rawDomainMax } : null);
         onLoadingChange?.(false);
       })
       .catch(err => {
@@ -851,14 +882,16 @@ function CountryGridLayer({ filePath, colorStops, opacity, onDomainReady, onLoad
   // no refetch.
   useEffect(() => {
     if (!layerRef.current || !featuresRef.current.length) return;
-    const propertyKey = emissionsPropertyKey(controls.sector, controls.satellite);
-    const domainMax    = domainMaxFor(featuresRef.current, propertyKey);
+    const propertyKey       = emissionsPropertyKey(controls.sector, controls.satellite);
+    const domainPropertyKey = emissionsPropertyKey(pinnedSector ?? controls.sector, controls.satellite);
+    const rawDomainMax      = domainMaxFor(featuresRef.current, domainPropertyKey);
+    const scaleMax          = controls.colorScaleMax ?? 1.0;
     styleRef.current.propertyKey = propertyKey;
-    styleRef.current.domainMax   = domainMax || 1;
+    styleRef.current.domainMax   = (rawDomainMax || 1) * scaleMax;
     layerRef.current.setStyle(styleFeature);
-    onDomainReady?.(domainMax > 0 ? { min: 0, max: domainMax } : null);
+    onDomainReady?.(rawDomainMax > 0 ? { min: 0, max: rawDomainMax } : null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [controls.sector, controls.satellite, styleFeature]);
+  }, [controls.sector, controls.satellite, controls.colorScaleMax, pinnedSector, styleFeature]);
 
   useMapEvents({
     mousemove(e) {
@@ -1032,6 +1065,8 @@ export function MapView() {
     setSelectedState,
     jsonGridDomain,
     setJsonGridDomain,
+    pinnedGridMax,
+    setPinnedGridMax,
     uploadedData,
   } = useDatasetContext();
 
@@ -1053,10 +1088,17 @@ export function MapView() {
     ? uploadedData?.sectors?.[controls.sector] ?? null
     : null;
 
-  // Clear the JSON grid domain when any grid-affecting control changes
+  // Clear the JSON grid domain when any grid-affecting control changes, so
+  // the legend blanks out rather than showing a stale domain while the newly
+  // selected sector's file loads. ch4-global's CountryGridLayer is excluded —
+  // it recomputes its domain synchronously from data already in memory (no
+  // refetch on sector change) and reports it via its own effect; since that
+  // effect lives on a descendant component, it can run before this one in
+  // the same commit, and this clear would then stomp the value it just set.
   useEffect(() => {
+    if (activeDataset.gridType === 'country-mask') return;
     setJsonGridDomain(null);
-  }, [activeDataset.id, controls.sector, controls.year, setJsonGridDomain]);
+  }, [activeDataset.id, activeDataset.gridType, controls.sector, controls.year, setJsonGridDomain]);
 
   const isPeriodGrid = activeDataset.gridType === 'period';
 
@@ -1109,6 +1151,21 @@ export function MapView() {
 
   const jsonMinMax = useJsonMinMax(jsonUncertaintyFilePath);
 
+  // ── Pinned-sector grid file path (Colombia grid mode) ─────────────────────
+  // Fetched independently of controls.sector so the color scale can stay
+  // pinned to the Total sector's own max instead of rescaling per sector.
+  const pinnedGridFilePath = useMemo(() => {
+    if (!isGridMode || activeDataset.gridType !== 'json') return null;
+    const pinnedGridSector = display.colorScale?.pinnedGridSector;
+    if (!pinnedGridSector) return null;
+    return baseData?.gridFiles?.[controls.year]?.[pinnedGridSector] ?? null;
+  }, [isGridMode, activeDataset.gridType, baseData, controls.year, display.colorScale]);
+
+  const fetchedPinnedGridMax = useJsonGridMax(pinnedGridFilePath);
+  useEffect(() => {
+    setPinnedGridMax(fetchedPinnedGridMax);
+  }, [fetchedPinnedGridMax, setPinnedGridMax]);
+
   // ── Per-country masked grid file path (ch4-global) ────────────────────────
   const countryGridFilePath = useMemo(() => {
     if (activeDataset.gridType !== 'country-mask' || !selectedState) return null;
@@ -1116,14 +1173,29 @@ export function MapView() {
   }, [activeDataset.gridType, selectedState]);
 
   // ── Raster/grid domain ────────────────────────────────────────────────────
+  // Grid views pin their domain to the dataset's Total sector (see
+  // display.colorScale.pinnedGridSector) rather than rescaling on every
+  // sector change — the maxEmission/colorScaleMax slider still adjusts from
+  // there. ch4-permian-weekly (period grids) is intentionally excluded — no
+  // pinning requested for it, it keeps its existing per-variable domain.
   const rasterDomain = useMemo(() => {
     if (!isGridMode) return { min: 0, max: 1 };
     const scaleMax = controls.maxEmission ?? controls.colorScaleMax ?? 1.0;
+    const pinnedGridSector = display.colorScale?.pinnedGridSector;
     if (baseData?.manifest) {
-      const g = isPeriodGrid
-        ? getPeriodGlobalDomain(baseData.manifest, controls.satellite, controls.sector)
-        : getGlobalDomain(baseData.manifest, controls.sector);
+      if (isPeriodGrid) {
+        const g = getPeriodGlobalDomain(baseData.manifest, controls.satellite, controls.sector);
+        return { min: 0, max: g.max * scaleMax };
+      }
+      const g = getGlobalDomain(baseData.manifest, pinnedGridSector ?? controls.sector);
       return { min: 0, max: g.max * scaleMax };
+    }
+    // Colombia: pinnedGridMax is fetched independently of controls.sector, so
+    // once it's loaded it stays valid across sector switches — check it
+    // before jsonGridDomain (which is cleared on every sector change) so the
+    // domain doesn't blank out while the newly-selected sector's own file loads.
+    if (pinnedGridSector && pinnedGridMax != null) {
+      return { min: 0, max: pinnedGridMax * scaleMax };
     }
     if (jsonGridDomain != null) {
       return { min: 0, max: jsonGridDomain.max * scaleMax };
@@ -1131,16 +1203,22 @@ export function MapView() {
     return { min: 0, max: 1 };
   }, [
     controls.viewMode, baseData?.manifest, controls.sector, isPeriodGrid, controls.satellite,
-    controls.maxEmission, controls.colorScaleMax, jsonGridDomain,
+    controls.maxEmission, controls.colorScaleMax, jsonGridDomain, display.colorScale, pinnedGridMax,
   ]);
 
   // ── Choropleth domain ─────────────────────────────────────────────────────
   const choroplethDomain = useMemo(() => {
     if (isGridMode || !baseData) return { min: 0, max: 10 };
-    return computeChoroplethDomain(
-      baseData, controls.year, controls.satellite, controls.sector,
+    const domainSector = display.colorScale?.pinnedSector ?? controls.sector;
+    const base = computeChoroplethDomain(
+      baseData, controls.year, controls.satellite, domainSector,
     );
-  }, [baseData, controls.viewMode, controls.year, controls.satellite, controls.sector]);
+    const scaleMax = controls.colorScaleMax ?? 1.0;
+    return { min: base.min, max: base.max * scaleMax };
+  }, [
+    baseData, controls.viewMode, controls.year, controls.satellite, controls.sector,
+    controls.colorScaleMax, display.colorScale,
+  ]);
 
   // ── Column key for choropleth lookup ──────────────────────────────────────
   const colKey = useMemo(
@@ -1245,6 +1323,7 @@ export function MapView() {
             filePath={countryGridFilePath}
             colorStops={colorStops}
             opacity={controls.opacity ?? 0.7}
+            pinnedSector={display.colorScale?.pinnedGridSector}
             onDomainReady={(d) => setJsonGridDomain(d)}
             onLoadingChange={setCountryGridLoading}
           />

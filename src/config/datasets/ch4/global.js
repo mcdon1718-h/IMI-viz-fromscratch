@@ -156,6 +156,14 @@ registerDataset({
       default: 0.7,
       format:  v => `${Math.round(v * 100)}%`,
     },
+    {
+      key:     'colorScaleMax',
+      label:   'Color Scale Max',
+      type:    'slider',
+      options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 1.5, 2.0],
+      default: 1.0,
+      format:  v => `${Math.round(v * 100)}%`,
+    },
   ],
 
   display: {
@@ -175,6 +183,13 @@ registerDataset({
         [0.65, '#e31a1c'],
         [1.0,  '#800026'],
       ],
+      // Domain is pinned to this sector's max rather than recomputed on every
+      // sector change, so switching sectors doesn't rescale the color scale —
+      // colorScaleMax slider still adjusts it from here. ch4-global has no
+      // separate grid/choropleth toggle, so both the shaded map and the
+      // per-country grid overlay pin to the same sector.
+      pinnedSector:     'TotalAnth',
+      pinnedGridSector: 'TotalAnth',
     },
   },
 

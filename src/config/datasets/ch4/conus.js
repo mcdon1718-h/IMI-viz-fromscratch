@@ -118,6 +118,10 @@ registerDataset({
         [0.65, '#e31a1c'],
         [1.0,  '#800026'],
       ],
+      // Grid view's domain is pinned to the Total sector's own max rather
+      // than recomputed on every sector change — Color Scale Max slider
+      // still adjusts it from here. Shaded-map view is unaffected.
+      pinnedGridSector: 'Total_ExclSoilAbs',
     },
   },
 
