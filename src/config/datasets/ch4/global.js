@@ -3,14 +3,11 @@ import { fetchCSV, parseNumber }   from '../../../utils/emissionsUtils';
 
 const YEAR = 2023; // only year available for this dataset
 
-// Bar chart / sector dropdown sectors — mirrors the original TilingTheWorld
-// app's sector list (Termites/Seeps/OtherAnthPlusRes are folded into
-// Natural/OtherAnth there and are intentionally not exposed separately here).
-const BAR_SECTOR_KEYS = [
-  'TotalAnth', 'Livestock','Coal', 'OilAndGas', 'Rice', 'Landfills', 'Wastewater',
-  'Reservoirs', 'OtherAnth', 'Wetlands', 'BiomassBurn', 'Natural'
-];
-
+// column names from emissions_data3.csv. possibly going to be deprecated once new
+// data source added. 
+// These are options for map view sector dropdown menu.
+// these are also 'sectorKeys' for DataTotals.jsx -- used for 2x2 sum totals table
+// NOT used for sector bar chart, see RANGES_SECTORS below for that. 
 const SECTOR_OPTIONS = [
   { value: 'TotalAnth',   label: 'Total (Anthropogenic)' },
   { value: 'Livestock',   label: 'Livestock'     },
@@ -25,29 +22,24 @@ const SECTOR_OPTIONS = [
   { value: 'BiomassBurn', label: 'Biomass Burning' },
   { value: 'Natural',     label: 'Other Natural' },
 ];
+const CSV_SECTOR_KEYS = SECTOR_OPTIONS.map(o => o.value);
 
-// Sector Breakdown chart sector keys — deliberately coarser than
-// BAR_SECTOR_KEYS (see loadSectorRanges below): sourced entirely from
-// website_data_withranges.csv, which is the country- and sector-level
-// totals + uncertainty file (emissions_data3.csv has no reliable per-sector
-// uncertainty and is no longer used for the bar chart). That file only has
-// Livestock/Coal/Oil-Gas/Rice/Reservoirs/Waste/Other (Waste bundles
-// Wastewater+Landfills, Other bundles OtherAnth+BiomassBurn) plus
-// AnthroTotal — no Wetlands, no Natural (Termites/Seeps) split at all.
-const RANGES_SECTOR_KEYS = ['TotalAnth', 'Livestock', 'Coal', 'OilAndGas', 'Rice', 'Reservoirs', 'Waste', 'Other'];
-
-// RANGES_SECTOR_KEYS value -> website_data_withranges.csv column prefix.
-// Only OilAndGas (Oil-Gas) and TotalAnth (AnthroTotal) differ in spelling.
-const RANGES_COLUMN_PREFIX = {
-  TotalAnth:  'AnthroTotal',
-  Livestock:  'Livestock',
-  Coal:       'Coal',
-  OilAndGas:  'Oil-Gas',
-  Rice:       'Rice',
-  Reservoirs: 'Reservoirs',
-  Waste:      'Waste',
-  Other:      'Other',
-};
+// Used for creating sector breakdown chart. Data comes from 
+// website_data_withranges.csv, which is the country- and sector-level 
+// totals + uncertainty file.
+// This is currently missing non-anthro sources; update pending. 
+const RANGES_SECTORS = [
+  { key: 'TotalAnth',  label: 'Total',      columnPrefix: 'AnthroTotal' },
+  { key: 'Livestock',  label: 'Livestock',  columnPrefix: 'Livestock'   },
+  { key: 'Coal',       label: 'Coal',       columnPrefix: 'Coal'        },
+  { key: 'OilAndGas',  label: 'Oil & Gas',  columnPrefix: 'Oil-Gas'     },
+  { key: 'Rice',       label: 'Rice',       columnPrefix: 'Rice'        },
+  { key: 'Reservoirs', label: 'Reservoirs', columnPrefix: 'Reservoirs'  },
+  { key: 'Waste',      label: 'Waste',      columnPrefix: 'Waste'       },
+  { key: 'Other',      label: 'Other',      columnPrefix: 'Other'       },
+];
+const RANGES_SECTOR_KEYS   = RANGES_SECTORS.map(s => s.key);
+const RANGES_COLUMN_PREFIX = Object.fromEntries(RANGES_SECTORS.map(s => [s.key, s.columnPrefix]));
 
 // Builds { sectorKeys, byCountry, world } from website_data_withranges.csv's
 // rows: byCountry[countryName][sectorKey] = { prior, post, minDelta, maxDelta },
@@ -181,21 +173,9 @@ registerDataset({
     legendUnits:      'Tg/yr',
     defaultPlaceLabel: 'Global', // shown in chart headers when no country is selected
     totalsLabels: { bottomUp: 'Bottom-up', posterior: 'IMI Best Estimate' }, // column headers on the DataTotals table
-    // Manually curated order + labels for the Sector Breakdown bar chart
-    // (SectorBarChart.jsx's resolveBarSectors) — edit freely; a sector left
-    // out just doesn't get a bar. Keys must match RANGES_SECTOR_KEYS above
-    // (website_data_withranges.csv's sectors); reproduces its current order/
-    // labelSector's labels as a starting point.
-    barSectors: [
-      { key: 'TotalAnth',  label: 'Total' },
-      { key: 'Livestock',  label: 'Livestock' },
-      { key: 'Coal',       label: 'Coal' },
-      { key: 'OilAndGas',  label: 'Oil & Gas' },
-      { key: 'Rice',       label: 'Rice' },
-      { key: 'Reservoirs', label: 'Reservoirs' },
-      { key: 'Waste',      label: 'Waste' },
-      { key: 'Other',      label: 'Other' },
-    ],
+    // Order + labels for the Sector Breakdown bar chart — see RANGES_SECTORS
+    // above, which is this control's single source of truth.
+    barSectors: RANGES_SECTORS.map(({ key, label }) => ({ key, label })),
     colorScale: {
       stops: [
         [0,    '#ffffcc'],
@@ -243,7 +223,7 @@ registerDataset({
       // chart branch (buildBarData's satellite === 'prior' path).
       const priorBare = {};
 
-      for (const s of BAR_SECTOR_KEYS) {
+      for (const s of CSV_SECTOR_KEYS) {
         const prior = parseNumber(raw[`${s}_prior`]);
         const post  = parseNumber(raw[`${s}_post`]);
         row[`${s}_prior`]     = prior;
@@ -278,7 +258,7 @@ registerDataset({
       nationalPosterior: { [YEAR]: worldPosterior },
       nationalPrior:     { [YEAR]: worldPrior },
       stateByYearPrior,
-      sectorKeys:      BAR_SECTOR_KEYS,
+      sectorKeys:      CSV_SECTOR_KEYS,
       sectorRanges:    loadSectorRanges(rangesRows), // Sector Breakdown chart's sole data source — see loadSectorRanges
       statesGeoJSON:   countriesGeoJSON,
       usStatesGeoJSON,

@@ -48,6 +48,28 @@ function resolveBarSectors(labels, barSectors) {
     .map(({ key, label }) => ({ key, label, i: indexByKey.get(key) }));
 }
 
+// Builds Sector Breakdown chart rows from a { labels, values, mins, maxs }
+// bundle (buildBarData/buildRangesBarData's shape) plus its matching
+// bottom-up bundle. Shared by the ch4-global and default (CONUS/other)
+// branches below, which differ only in which data-building functions
+// produced `data`/`bottomUpData`.
+function buildSectorRows(resolvedSectors, data, bottomUpData, { showUncertainty, showBottomUp, convert }) {
+  return resolvedSectors.map(({ label, i }) => ({
+    sector:        label,
+    value:         convert(data.values[i]),
+    errorRange:    showUncertainty && data.mins[i] != null
+      ? [convert(data.mins[i]), convert(data.maxs[i])]
+      : null,
+    errorDelta:    showUncertainty && data.mins[i] != null && data.values[i] != null
+      ? [
+          Math.max(0, convert(data.values[i] - data.mins[i])),
+          Math.max(0, convert(data.maxs[i]   - data.values[i])),
+        ]
+      : null,
+    bottomUpValue: showBottomUp ? convert(bottomUpData?.values[i] ?? null) : null,
+  }));
+}
+
 // Color key for charts that plot both series — swatch colors match the Bar
 // fills exactly (accent = IMI output, TEAL_COLOR = bottom-up).
 function SeriesLegend({ accent }) {
@@ -164,6 +186,96 @@ function SectorBarCustomTooltip({
   );
 }
 
+// Header row shared by the ch4-global and default branches: place/year/units
+// plus a loading indicator and the bottom-up legend when that series is shown.
+function SectorChartHeader({ place, year, units, loading, showBottomUp, accent }) {
+  return (
+    <>
+      <div className="chart-header">
+        <span className="chart-title">Sector Breakdown</span>
+        <span className="chart-place">{place}</span>
+        <span className="chart-year">{year}</span>
+        <span className="chart-units">{units}</span>
+        {loading && <span className="chart-status">Loading…</span>}
+      </div>
+      {showBottomUp && <SeriesLegend accent={accent} />}
+    </>
+  );
+}
+
+// The BarChart itself, shared by every branch below that plots
+// { sector, value, errorDelta, bottomUpValue } rows (i.e. everything except
+// the single-series user-upload chart, which has no bottom-up/uncertainty
+// series and uses its own tooltip).
+function SectorBarChartBody({ chartData, accent, displayUnits, showUncertainty, showBottomUp }) {
+  return (
+    <ResponsiveContainer width="100%" height={500}>
+      <BarChart
+        layout="vertical"
+        data={chartData}
+        margin={{ top: 4, right: showUncertainty ? 24 : 12, left: 0, bottom: 4 }}
+      >
+        <CartesianGrid
+          strokeDasharray="3 3"
+          stroke="rgba(255,255,255,0.06)"
+          horizontal={false}
+        />
+        <XAxis
+          type="number"
+          tick={{ fill: '#94a3b8', fontSize: 13 }}
+          axisLine={{ stroke: '#2d3148' }}
+          tickLine={false}
+        />
+        <YAxis
+          type="category"
+          dataKey="sector"
+          tick={{ fill: '#94a3b8', fontSize: 14 }}
+          axisLine={false}
+          tickLine={false}
+          width={90}
+        />
+
+        <Tooltip
+          content={
+            <SectorBarCustomTooltip
+              units={displayUnits}
+              accent={accent}
+              showUncertainty={showUncertainty}
+              showBottomUp={showBottomUp}
+            />
+          }
+          cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+        />
+
+        {/* Posterior bars */}
+        <Bar dataKey="value" name="Posterior" radius={[0, 3, 3, 0]}>
+          {chartData.map((_, i) => (
+            <Cell key={i} fill={accent} fillOpacity={0.85} />
+          ))}
+          {showUncertainty && (
+            <ErrorBar
+              dataKey="errorDelta"
+              width={4}
+              strokeWidth={1.5}
+              stroke="#94a3b8"
+              direction="x"
+            />
+          )}
+        </Bar>
+
+        {/* Bottom-up bars (teal) */}
+        {showBottomUp && (
+          <Bar dataKey="bottomUpValue" name="Bottom-up" radius={[0, 3, 3, 0]}>
+            {chartData.map((_, i) => (
+              <Cell key={i} fill={TEAL_COLOR} fillOpacity={0.75} />
+            ))}
+          </Bar>
+        )}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 export function SectorBarChart() {
   const { activeDataset, activeFamily, controls, selectedState, uploadedData } = useDatasetContext();
   const { data: baseData, loading } = useEmissionData();
@@ -253,51 +365,13 @@ export function SectorBarChart() {
         </div>
         <SeriesLegend accent={accent} />
 
-        <ResponsiveContainer width="100%" height={500}>
-          <BarChart
-            layout="vertical"
-            data={chartData}
-            margin={{ top: 4, right: 12, left: 0, bottom: 4 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
-            <XAxis
-              type="number"
-              tick={{ fill: '#94a3b8', fontSize: 13 }}
-              axisLine={{ stroke: '#2d3148' }}
-              tickLine={false}
-            />
-            <YAxis
-              type="category"
-              dataKey="sector"
-              tick={{ fill: '#94a3b8', fontSize: 14 }}
-              axisLine={false}
-              tickLine={false}
-              width={90}
-            />
-            <Tooltip
-              content={
-                <SectorBarCustomTooltip
-                  units={displayUnits}
-                  accent={accent}
-                  showUncertainty={false}
-                  showBottomUp
-                />
-              }
-              cursor={{ fill: 'rgba(255,255,255,0.04)' }}
-            />
-
-            <Bar dataKey="value" name="Posterior" radius={[0, 3, 3, 0]}>
-              {chartData.map((_, i) => (
-                <Cell key={i} fill={accent} fillOpacity={0.85} />
-              ))}
-            </Bar>
-            <Bar dataKey="bottomUpValue" name="Bottom-up" radius={[0, 3, 3, 0]}>
-              {chartData.map((_, i) => (
-                <Cell key={i} fill={TEAL_COLOR} fillOpacity={0.75} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <SectorBarChartBody
+          chartData={chartData}
+          accent={accent}
+          displayUnits={displayUnits}
+          showUncertainty={false}
+          showBottomUp
+        />
       </div>
     );
   }
@@ -305,7 +379,6 @@ export function SectorBarChart() {
   if (activeDataset.id === 'ch4-global') {
     if (!baseData?.sectorRanges) return null;
 
-    const mode       = selectedState ? 'state' : 'national';
     const placeLabel = selectedState ?? (activeDataset.display?.defaultPlaceLabel ?? 'National');
 
     const rangesData = buildRangesBarData(baseData.sectorRanges, {
@@ -322,97 +395,27 @@ export function SectorBarChart() {
       ? buildRangesBottomUpBarData(baseData.sectorRanges, { selectedState })
       : null;
 
-    const barSectors = resolveBarSectors(rangesData.labels, activeDataset.display?.barSectors);
-    const chartData = barSectors.map(({ label, i }) => ({
-      sector:        label,
-      value:         convert(rangesData.values[i]),
-      errorRange:    showUncertainty && rangesData.mins[i] != null
-        ? [convert(rangesData.mins[i]), convert(rangesData.maxs[i])]
-        : null,
-      errorDelta:    showUncertainty && rangesData.mins[i] != null && rangesData.values[i] != null
-        ? [
-            Math.max(0, convert(rangesData.values[i] - rangesData.mins[i])),
-            Math.max(0, convert(rangesData.maxs[i]   - rangesData.values[i])),
-          ]
-        : null,
-      bottomUpValue: showBottomUp ? convert(bottomUpData?.values[i] ?? null) : null,
-    }));
+    const resolvedSectors = resolveBarSectors(rangesData.labels, activeDataset.display?.barSectors);
+    const chartData = buildSectorRows(resolvedSectors, rangesData, bottomUpData, { showUncertainty, showBottomUp, convert });
 
     return (
       <div className="chart-panel">
-        <div className="chart-header">
-          <span className="chart-title">Sector Breakdown</span>
-          <span className="chart-place">{placeLabel}</span>
-          <span className="chart-year">{controls.year}</span>
-          <span className="chart-units">{displayUnits}</span>
-          {loading && <span className="chart-status">Loading…</span>}
-        </div>
-        {showBottomUp && <SeriesLegend accent={accent} />}
+        <SectorChartHeader
+          place={placeLabel}
+          year={controls.year}
+          units={displayUnits}
+          loading={loading}
+          showBottomUp={showBottomUp}
+          accent={accent}
+        />
 
-        <ResponsiveContainer width="100%" height={500}>
-          <BarChart
-            layout="vertical"
-            data={chartData}
-            margin={{ top: 4, right: showUncertainty ? 24 : 12, left: 0, bottom: 4 }}
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="rgba(255,255,255,0.06)"
-              horizontal={false}
-            />
-            <XAxis
-              type="number"
-              tick={{ fill: '#94a3b8', fontSize: 13 }}
-              axisLine={{ stroke: '#2d3148' }}
-              tickLine={false}
-            />
-            <YAxis
-              type="category"
-              dataKey="sector"
-              tick={{ fill: '#94a3b8', fontSize: 14 }}
-              axisLine={false}
-              tickLine={false}
-              width={90}
-            />
-
-            <Tooltip
-              content={
-                <SectorBarCustomTooltip
-                  units={displayUnits}
-                  accent={accent}
-                  showUncertainty={showUncertainty}
-                  showBottomUp={showBottomUp}
-                />
-              }
-              cursor={{ fill: 'rgba(255,255,255,0.04)' }}
-            />
-
-            {/* Posterior bars */}
-            <Bar dataKey="value" name="Posterior" radius={[0, 3, 3, 0]}>
-              {chartData.map((_, i) => (
-                <Cell key={i} fill={accent} fillOpacity={0.85} />
-              ))}
-              {showUncertainty && (
-                <ErrorBar
-                  dataKey="errorDelta"
-                  width={4}
-                  strokeWidth={1.5}
-                  stroke="#94a3b8"
-                  direction="x"
-                />
-              )}
-            </Bar>
-
-            {/* Bottom-up bars (teal) */}
-            {showBottomUp && (
-              <Bar dataKey="bottomUpValue" name="Bottom-up" radius={[0, 3, 3, 0]}>
-                {chartData.map((_, i) => (
-                  <Cell key={i} fill={TEAL_COLOR} fillOpacity={0.75} />
-                ))}
-              </Bar>
-            )}
-          </BarChart>
-        </ResponsiveContainer>
+        <SectorBarChartBody
+          chartData={chartData}
+          accent={accent}
+          displayUnits={displayUnits}
+          showUncertainty={showUncertainty}
+          showBottomUp={showBottomUp}
+        />
       </div>
     );
   }
@@ -441,97 +444,27 @@ export function SectorBarChart() {
     ? buildBottomUpBarData(baseData, { year: controls.year, mode, selectedState })
     : null;
 
-  const barSectors = resolveBarSectors(barData.labels, activeDataset.display?.barSectors);
-  const chartData = barSectors.map(({ label, i }) => ({
-    sector:        label,
-    value:         convert(barData.values[i]),
-    errorRange:    showUncertainty && barData.mins[i] != null
-      ? [convert(barData.mins[i]), convert(barData.maxs[i])]
-      : null,
-    errorDelta:    showUncertainty && barData.mins[i] != null && barData.values[i] != null
-      ? [
-          Math.max(0, convert(barData.values[i] - barData.mins[i])),
-          Math.max(0, convert(barData.maxs[i]   - barData.values[i])),
-        ]
-      : null,
-    bottomUpValue: showBottomUp ? convert(bottomUpData?.values[i] ?? null) : null,
-  }));
+  const resolvedSectors = resolveBarSectors(barData.labels, activeDataset.display?.barSectors);
+  const chartData = buildSectorRows(resolvedSectors, barData, bottomUpData, { showUncertainty, showBottomUp, convert });
 
   return (
     <div className="chart-panel">
-      <div className="chart-header">
-        <span className="chart-title">Sector Breakdown</span>
-        <span className="chart-place">{placeLabel}</span>
-        <span className="chart-year">{controls.year}</span>
-        <span className="chart-units">{displayUnits}</span>
-        {loading && <span className="chart-status">Loading…</span>}
-      </div>
-      {showBottomUp && <SeriesLegend accent={accent} />}
+      <SectorChartHeader
+        place={placeLabel}
+        year={controls.year}
+        units={displayUnits}
+        loading={loading}
+        showBottomUp={showBottomUp}
+        accent={accent}
+      />
 
-      <ResponsiveContainer width="100%" height={500}>
-        <BarChart
-          layout="vertical"
-          data={chartData}
-          margin={{ top: 4, right: showUncertainty ? 24 : 12, left: 0, bottom: 4 }}
-        >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke="rgba(255,255,255,0.06)"
-            horizontal={false}
-          />
-          <XAxis
-            type="number"
-            tick={{ fill: '#94a3b8', fontSize: 13 }}
-            axisLine={{ stroke: '#2d3148' }}
-            tickLine={false}
-          />
-          <YAxis
-            type="category"
-            dataKey="sector"
-            tick={{ fill: '#94a3b8', fontSize: 14 }}
-            axisLine={false}
-            tickLine={false}
-            width={90}
-          />
-
-          <Tooltip
-            content={
-              <SectorBarCustomTooltip
-                units={displayUnits}
-                accent={accent}
-                showUncertainty={showUncertainty}
-                showBottomUp={showBottomUp}
-              />
-            }
-            cursor={{ fill: 'rgba(255,255,255,0.04)' }}
-          />
-
-          {/* Posterior bars */}
-          <Bar dataKey="value" name="Posterior" radius={[0, 3, 3, 0]}>
-            {chartData.map((_, i) => (
-              <Cell key={i} fill={accent} fillOpacity={0.85} />
-            ))}
-            {showUncertainty && (
-              <ErrorBar
-                dataKey="errorDelta"
-                width={4}
-                strokeWidth={1.5}
-                stroke="#94a3b8"
-                direction="x"
-              />
-            )}
-          </Bar>
-
-          {/* Bottom-up bars (teal) — ghgi_tropomi only */}
-          {showBottomUp && (
-            <Bar dataKey="bottomUpValue" name="Bottom-up" radius={[0, 3, 3, 0]}>
-              {chartData.map((_, i) => (
-                <Cell key={i} fill={TEAL_COLOR} fillOpacity={0.75} />
-              ))}
-            </Bar>
-          )}
-        </BarChart>
-      </ResponsiveContainer>
+      <SectorBarChartBody
+        chartData={chartData}
+        accent={accent}
+        displayUnits={displayUnits}
+        showUncertainty={showUncertainty}
+        showBottomUp={showBottomUp}
+      />
     </div>
   );
 }

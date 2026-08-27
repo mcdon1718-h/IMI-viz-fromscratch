@@ -30,6 +30,18 @@ const TEAL_COLOR   = '#14b8a6';
 // week; Gg (1e6 kg) keeps the axis/tooltip numbers readable.
 const KG_TO_GG = 1e6;
 
+// Shared axis/grid styling for both branches below. Recharts needs
+// CartesianGrid/XAxis/YAxis as direct children of the chart to auto-detect
+// them, so these are prop objects to spread onto each branch's own element
+// rather than a wrapping component.
+const GRID_STYLE      = { strokeDasharray: '3 3', stroke: 'rgba(255,255,255,0.06)' };
+const AXIS_TICK_STYLE = { tick: { fill: '#94a3b8', fontSize: 13 }, axisLine: { stroke: '#2d3148' }, tickLine: false };
+const Y_AXIS_STYLE    = { ...AXIS_TICK_STYLE, width: 52 };
+
+function cursorStyle(accent) {
+  return { stroke: accent, strokeOpacity: 0.4, strokeWidth: 1, strokeDasharray: '4 4' };
+}
+
 function TimeSeriesCustomTooltip({ active, payload, label, units, accent }) {
   if (!active || !payload?.length) return null;
 
@@ -157,30 +169,18 @@ export function TimeSeriesPlot() {
             data={chartData}
             margin={{ top: 22, right: 16, left: 0, bottom: 0 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+            <CartesianGrid {...GRID_STYLE} />
             <XAxis
               dataKey="date"
               ticks={yearTicks}
               tickFormatter={v => v.slice(0, 4)}
-              tick={{ fill: '#94a3b8', fontSize: 13 }}
-              axisLine={{ stroke: '#2d3148' }}
-              tickLine={false}
+              {...AXIS_TICK_STYLE}
             />
-            <YAxis
-              tick={{ fill: '#94a3b8', fontSize: 13 }}
-              axisLine={{ stroke: '#2d3148' }}
-              tickLine={false}
-              width={52}
-            />
+            <YAxis {...Y_AXIS_STYLE} />
 
             <Tooltip
               content={<TimeSeriesCustomTooltip units={displayUnits} accent={accent} />}
-              cursor={{
-                stroke:          accent,
-                strokeOpacity:   0.4,
-                strokeWidth:     1,
-                strokeDasharray: '4 4',
-              }}
+              cursor={cursorStyle(accent)}
             />
 
             <Line
@@ -271,33 +271,13 @@ export function TimeSeriesPlot() {
           data={chartData}
           margin={{ top: 22, right: 16, left: 0, bottom: 0 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-          <XAxis
-            dataKey="year"
-            tick={{ fill: '#94a3b8', fontSize: 13 }}
-            axisLine={{ stroke: '#2d3148' }}
-            tickLine={false}
-          />
-          <YAxis
-            tick={{ fill: '#94a3b8', fontSize: 13 }}
-            axisLine={{ stroke: '#2d3148' }}
-            tickLine={false}
-            width={52}
-          />
+          <CartesianGrid {...GRID_STYLE} />
+          <XAxis dataKey="year" {...AXIS_TICK_STYLE} />
+          <YAxis {...Y_AXIS_STYLE} />
 
           <Tooltip
-            content={
-              <TimeSeriesCustomTooltip
-                units={displayUnits}
-                accent={accent}
-              />
-            }
-            cursor={{
-              stroke:          accent,
-              strokeOpacity:   0.4,
-              strokeWidth:     1,
-              strokeDasharray: '4 4',
-            }}
+            content={<TimeSeriesCustomTooltip units={displayUnits} accent={accent} />}
+            cursor={cursorStyle(accent)}
           />
 
           {/* Uncertainty band */}

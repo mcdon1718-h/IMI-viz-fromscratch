@@ -3,9 +3,6 @@ import { registerDataset } from '../../datasetRegistry';
 const ALL_YEARS  = [2019, 2020, 2021, 2022, 2023, 2024];
 const DATA_ROOT  = `${import.meta.env.BASE_URL}data/ch4_colombia`;
 
-// Bar chart shows individual sectors; TotalAnth is the aggregate and is excluded
-const BAR_SECTOR_KEYS = ['Coal', 'OilGas', 'Livestock', 'Reservoirs', 'Rice', 'Waste', 'Other'];
-
 // Time-series / map sector dropdown includes the total
 const SECTOR_OPTIONS = [
   { value: 'TotalAnth',  label: 'Total'      },
@@ -17,6 +14,9 @@ const SECTOR_OPTIONS = [
   { value: 'Waste',      label: 'Waste'       },
   { value: 'Other',      label: 'Other Anthropogenic' },
 ];
+
+// Bar chart shows individual sectors; TotalAnth is the aggregate and is excluded
+const BAR_SECTOR_KEYS = SECTOR_OPTIONS.map(o => o.value).filter(v => v !== 'TotalAnth');
 
 /**
  * Transform a chart_summary entry { sector: { value, min, max } } into a flat row.
