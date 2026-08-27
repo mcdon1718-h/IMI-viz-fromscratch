@@ -1228,7 +1228,11 @@ export function MapView() {
             colKey={colKey}
             domain={choroplethDomain}
             colorStops={colorStops}
-            opacity={controls.choroplethOpacity ?? 0.65}
+            opacity={
+              activeDataset.gridType === 'country-mask'
+                ? Math.max(0.1, (controls.opacity ?? 0.7) - 0.2)
+                : (controls.choroplethOpacity ?? 0.65)
+            }
             suppressTooltipFor={activeDataset.gridType === 'country-mask' ? selectedState : null}
             onStateClick={handleStateClick}
           />
@@ -1240,7 +1244,7 @@ export function MapView() {
             key={countryGridFilePath}
             filePath={countryGridFilePath}
             colorStops={colorStops}
-            opacity={controls.opacity ?? 0.75}
+            opacity={controls.opacity ?? 0.7}
             onDomainReady={(d) => setJsonGridDomain(d)}
             onLoadingChange={setCountryGridLoading}
           />
