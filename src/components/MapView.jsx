@@ -137,6 +137,26 @@ function getValueAtLatLngFromGrid(gridMeta, values, lat, lng, { allowZero = fals
   return v;
 }
 
+// ─── LabelsPane ───────────────────────────────────────────────────────────────
+// Hosts the basemap's place-name tiles above every data overlay. The data panes
+// run 645–650 (see RasterLayer / JsonGridLayer / CountryGridLayer), so 660 puts
+// labels on top. pointer-events:none keeps region clicks and grid hover working.
+
+// The pane is built during render, not in an effect: the label TileLayer is a
+// sibling, and Leaflet throws when a layer names a pane that does not exist yet.
+function LabelsPane() {
+  const map = useMap();
+
+  useMemo(() => {
+    if (map.getPane('labelPane')) return;
+    const pane = map.createPane('labelPane');
+    pane.style.zIndex = '660';
+    pane.style.pointerEvents = 'none';
+  }, [map]);
+
+  return null;
+}
+
 // ─── MapController ────────────────────────────────────────────────────────────
 // React-Leaflet's MapContainer treats center / zoom / maxBounds as initial-only.
 // This child component keeps the Leaflet instance in sync when the active dataset
@@ -1278,13 +1298,28 @@ export function MapView() {
         {/* Keeps view, bounds and zoom limits in sync after dataset switches */}
         <MapController mapConfig={mapConfig} />
 
+        {/*
+          Basemap is split into geometry + labels so place names draw ABOVE the
+          data overlays (which sit on panes at z-index 645–650). With a single
+          dark_all layer the labels get buried the moment any grid is shown.
+
+          Do NOT set tileSize/zoomOffset here: CARTO serves a 256-tile scheme
+          and uses {r}=@2x for retina, so the Mapbox-style 512/-1 pairing just
+          renders one zoom level coarser than the map actually is.
+        */}
         <TileLayer
-          url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${import.meta.env.VITE_CARTO_API_KEY}`}
+          url={`https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png?key=${import.meta.env.VITE_CARTO_API_KEY}`}
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           subdomains="abcd"
-          maxZoom={19}
-          tileSize={512}
-          zoomOffset={-1}
+          maxZoom={20}
+        />
+
+        <LabelsPane />
+        <TileLayer
+          url={`https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png?key=${import.meta.env.VITE_CARTO_API_KEY}`}
+          subdomains="abcd"
+          maxZoom={20}
+          pane="labelPane"
         />
 
         {/* Grid hover tooltip — TIF mode only */}
